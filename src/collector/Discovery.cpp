@@ -24,6 +24,8 @@
 
 #include <curl/curl.h>
 #include <mongo/client/dbclient.h>
+#include <netdb.h>
+#include <sys/socket.h>
 
 #include <cstring>
 #include <set>
@@ -45,9 +47,10 @@ struct dnet_addr_compare
 
 } // unnamed namespace
 
-Discovery::Discovery(WorkerApplication & app)
+Discovery::Discovery(Collector & collector)
     :
-    m_app(app)
+    m_collector(collector),
+    m_resolve_nodes_duration(0)
 {}
 
 Discovery::~Discovery()
@@ -112,6 +115,8 @@ int Discovery::init_mongo()
 
 void Discovery::resolve_nodes(Round & round)
 {
+    Stopwatch watch(m_resolve_nodes_duration);
+
     if (m_session == NULL) {
         BH_LOG(app::logger(), DNET_LOG_WARNING, "resolve_nodes: session is empty");
         return;
@@ -136,6 +141,7 @@ void Discovery::resolve_nodes(Round & round)
 
         if (host.get_name().empty()) {
             char hostname[NI_MAXHOST];
+
             int rc = getnameinfo((const sockaddr *) addr.addr, addr.addr_len,
                     hostname, sizeof(hostname), nullptr, 0, 0);
 
@@ -148,12 +154,10 @@ void Discovery::resolve_nodes(Round & round)
             }
         }
 
-#if 0 // Inventory is not implemented yet
-        if (host.get_dc().empty() && !host.get_name().empty()) {
-            std::string dc = m_app.get_inventory().get_dc_by_host(host.get_name().c_str());
+        if (!host.get_name().empty()) {
+            std::string dc = m_collector.get_inventory().get_dc_by_host(host.get_name().c_str());
             host.set_dc(dc);
         }
-#endif
 
         if (!storage.has_node(host_addr, port, addr.family))
             storage.add_node(host, port, addr.family);

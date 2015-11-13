@@ -24,9 +24,9 @@
 
 #include "Job.h"
 
-Collector::Collector(WorkerApplication & app)
+Collector::Collector()
     :
-    m_discovery(app),
+    m_discovery(*this),
     m_storage_version(1)
 {
     m_queue = dispatch_queue_create("collector", DISPATCH_QUEUE_CONCURRENT);
@@ -37,30 +37,29 @@ Collector::Collector(WorkerApplication & app)
 
 int Collector::init()
 {
-    do {
-        if (m_discovery.init_curl())
-            return -1;
+    if (m_discovery.init_curl())
+        return -1;
 
-        if (m_discovery.init_elliptics())
-            break;
-
-        if (m_discovery.init_mongo()) {
-            m_discovery.stop_elliptics();
-            break;
-        }
-
-        return 0;
+    if (m_discovery.init_elliptics()) {
+        m_discovery.stop_curl();
+        return -1;
     }
-    while (0);
 
-    m_discovery.stop_curl();
-    return -1;
+    if (m_discovery.init_mongo()) {
+        m_discovery.stop_elliptics();
+        m_discovery.stop_curl();
+        return -1;
+    }
+
+    m_inventory.init();
+
+    return 0;
 }
 
 void Collector::start()
 {
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Collector: starting");
-    dispatch_async_f(m_queue, this, &Collector::step1_start_round);
+    BH_LOG(app::logger(), DNET_LOG_INFO, "Collector: Dispatching step 0");
+    dispatch_async_f(m_queue, this, &Collector::step0_start_inventory);
 }
 
 void Collector::finalize_round(Round *round)
@@ -70,9 +69,21 @@ void Collector::finalize_round(Round *round)
 
 void Collector::stop()
 {
+    m_inventory.stop();
     m_discovery.stop_mongo();
     m_discovery.stop_elliptics();
     m_discovery.stop_curl();
+}
+
+void Collector::step0_start_inventory(void *arg)
+{
+    Collector & self = *static_cast<Collector*>(arg);
+
+    BH_LOG(app::logger(), DNET_LOG_INFO, "Collector: Starting inventory (initial download)");
+    self.m_inventory.download_initial();
+
+    BH_LOG(app::logger(), DNET_LOG_INFO, "Collector: Dispatching step 1");
+    dispatch_async_f(self.m_queue, &self, &Collector::step1_start_round);
 }
 
 void Collector::step1_start_round(void *arg)
@@ -310,6 +321,7 @@ void Collector::execute_summary(void *arg)
 
     ostr << "Round metrics:\n"
             "  Total time: " << MSEC(self.m_round_clock.total) << " ms\n"
+            "  Resolve nodes: " << MSEC(self.m_discovery.get_resolve_nodes_duration()) << " ms\n"
             "  Jobs & history databases: " << MSEC(self.m_round_clock.mongo) << " ms\n"
             "  HTTP download time: " << MSEC(self.m_round_clock.perform_download) << " ms\n"
             "  Remaining JSON parsing and jobs processing after HTTP download completed: "

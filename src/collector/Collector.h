@@ -20,6 +20,7 @@
 #define __4e5e1746_2d12_42c1_9384_b1a59c632ca3
 
 #include "Discovery.h"
+#include "Inventory.h"
 #include "Round.h"
 #include "Storage.h"
 
@@ -37,10 +38,13 @@ class on_summary;
 class Collector
 {
 public:
-    Collector(WorkerApplication & app);
+    Collector();
 
     Discovery & get_discovery()
     { return m_discovery; }
+
+    Inventory & get_inventory()
+    { return m_inventory; }
 
     Storage & get_storage()
     { return *m_storage; }
@@ -63,6 +67,7 @@ public:
     void refresh(std::shared_ptr<on_refresh> handler);
 
 private:
+    static void step0_start_inventory(void *arg);
     static void step1_start_round(void *arg);
     static void step1_start_forced(void *arg);
     static void step1_start_refresh(void *arg);
@@ -77,6 +82,8 @@ private:
 
 private:
     Discovery m_discovery;
+    Inventory m_inventory;
+
     dispatch_queue_t m_queue;
 
     std::unique_ptr<Storage> m_storage;
