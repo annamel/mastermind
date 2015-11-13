@@ -39,13 +39,19 @@ enum ConfigKey
     Url                               = 0x2000,
     Jobs                              = 0x4000,
     History                           = 0x8000,
-    Db                                = 0x10000,
-    Options                           = 0x20000,
-    ConnectTimeoutMS                  = 0x40000,
-    NodeBackendStatStaleTimeout       = 0x80000,
-    Cache                             = 0x100000,
-    GroupPathPrefix                   = 0x200000,
-    ForbiddenNsWithoutSettings        = 0x400000
+    Inventory                         = 0x10000,
+    Db                                = 0x20000,
+    Options                           = 0x40000,
+    ConnectTimeoutMS                  = 0x80000,
+    NodeBackendStatStaleTimeout       = 0x100000,
+    Cache                             = 0x200000,
+    GroupPathPrefix                   = 0x400000,
+    ForbiddenNsWithoutSettings        = 0x800000,
+    ForbiddenDcSharingAmongGroups     = 0x1000000,
+    AppName                           = 0x2000000,
+    InfrastructureDcCacheUpdatePeriod = 0x4000000,
+    InfrastructureDcCacheValidTime    = 0x8000000,
+    InventoryWorkerTimeout            = 0x10000000
 };
 
 std::vector<Parser::FolderVector> config_folders = {
@@ -54,12 +60,17 @@ std::vector<Parser::FolderVector> config_folders = {
         { "forbidden_dht_groups",                  0, ForbiddenDhtGroups                },
         { "forbidden_unmatched_group_total_space", 0, ForbiddenUnmatchedGroupTotalSpace },
         { "forbidden_ns_without_settings",         0, ForbiddenNsWithoutSettings        },
+        { "forbidden_dc_sharing_among_groups",     0, ForbiddenDcSharingAmongGroups     },
+        { "app_name",                              0, AppName                           },
         { "reserved_space",                        0, ReservedSpace                     },
         { "node_backend_stat_stale_timeout",       0, NodeBackendStatStaleTimeout       },
         { "dnet_log_mask",                         0, DnetLogMask                       },
         { "net_thread_num",                        0, NetThreadNum                      },
         { "io_thread_num",                         0, IoThreadNum                       },
         { "nonblocking_io_thread_num",             0, NonblockingIoThreadNum            },
+        { "infrastructure_dc_cache_update_period", 0, InfrastructureDcCacheUpdatePeriod },
+        { "infrastructure_dc_cache_valid_time",    0, InfrastructureDcCacheValidTime    },
+        { "inventory_worker_timeout",              0, InventoryWorkerTimeout            },
         { "metadata",                              0, Metadata                          },
         { "cache",                                 0, Cache                             }
     },
@@ -69,14 +80,16 @@ std::vector<Parser::FolderVector> config_folders = {
         { "wait_timeout",      Elliptics, WaitTimeout     },
         { "url",               Metadata,  Url             },
         { "history",           Metadata,  History         },
+        { "inventory",         Metadata,  Inventory       },
         { "jobs",              Metadata,  Jobs            },
         { "options",           Metadata,  Options         },
         { "group_path_prefix", Cache,     GroupPathPrefix }
     },
     {
-        { "db",               Metadata|History, Db               },
-        { "db",               Metadata|Jobs,    Db               },
-        { "connectTimeoutMS", Metadata|Options, ConnectTimeoutMS }
+        { "db",               Metadata|History,   Db               },
+        { "db",               Metadata|Inventory, Db               },
+        { "db",               Metadata|Jobs,      Db               },
+        { "connectTimeoutMS", Metadata|Options,   ConnectTimeoutMS }
     }
 };
 
@@ -86,19 +99,25 @@ Parser::UIntInfoVector config_uint_info = {
     { ForbiddenDhtGroups,                SET, offsetof(Config, forbidden_dht_groups)                  },
     { ForbiddenUnmatchedGroupTotalSpace, SET, offsetof(Config, forbidden_unmatched_group_total_space) },
     { ForbiddenNsWithoutSettings,        SET, offsetof(Config, forbidden_ns_without_settings)         },
+    { ForbiddenDcSharingAmongGroups,     SET, offsetof(Config, forbidden_dc_sharing_among_groups)     },
     { ReservedSpace,                     SET, offsetof(Config, reserved_space)                        },
     { NodeBackendStatStaleTimeout,       SET, offsetof(Config, node_backend_stat_stale_timeout)       },
     { DnetLogMask,                       SET, offsetof(Config, dnet_log_mask)                         },
     { NetThreadNum,                      SET, offsetof(Config, net_thread_num)                        },
     { IoThreadNum,                       SET, offsetof(Config, io_thread_num)                         },
     { NonblockingIoThreadNum,            SET, offsetof(Config, nonblocking_io_thread_num)             },
-    { Metadata|Options|ConnectTimeoutMS, SET, offsetof(Config, metadata.options.connectTimeoutMS)     }
+    { Metadata|Options|ConnectTimeoutMS, SET, offsetof(Config, metadata.options.connectTimeoutMS)     },
+    { InfrastructureDcCacheUpdatePeriod, SET, offsetof(Config, infrastructure_dc_cache_update_period) },
+    { InfrastructureDcCacheValidTime,    SET, offsetof(Config, infrastructure_dc_cache_valid_time)    },
+    { InventoryWorkerTimeout,            SET, offsetof(Config, inventory_worker_timeout)              }
 };
 
 Parser::StringInfoVector config_string_info = {
     { Metadata|Url,          offsetof(Config, metadata.url)            },
     { Metadata|History|Db,   offsetof(Config, metadata.history.db)     },
+    { Metadata|Inventory|Db, offsetof(Config, metadata.inventory.db)   },
     { Metadata|Jobs|Db,      offsetof(Config, metadata.jobs.db)        },
+    { AppName,               offsetof(Config, app_name)                },
     { Cache|GroupPathPrefix, offsetof(Config, cache_group_path_prefix) }
 };
 

@@ -91,8 +91,7 @@ void Couple::update_status()
         return;
     }
 
-    // TODO: Uncomment as soon as Inventory is implemented.
-    if (/* app::config().forbidden_dc_sharing_among_groups */ false) {
+    if (app::config().forbidden_dc_sharing_among_groups) {
         if (check_dc_sharing() != 0)
             return;
     }
