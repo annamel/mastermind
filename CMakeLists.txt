@@ -15,6 +15,7 @@ find_package(CURL REQUIRED)
 
 include(cmake/locate_library.cmake)
 locate_library(MSGPACK "msgpack.hpp" "msgpack")
+locate_library(MONGOCLIENT "mongo/version.h" "mongoclient")
 
 include_directories(${elliptics_INCLUDE_DIRS} ${CocaineNative_INCLUDE_DIRS}
     ${RAPIDJSON_INCLUDE_DIRS} ${CURL_INCLUDE_DIRS})
