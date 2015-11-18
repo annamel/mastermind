@@ -40,12 +40,16 @@ struct Config
         forbidden_dht_groups(0),
         forbidden_unmatched_group_total_space(0),
         forbidden_ns_without_settings(0),
+        forbidden_dc_sharing_among_groups(0),
         reserved_space(112742891519),
         node_backend_stat_stale_timeout(120),
         dnet_log_mask(3),
         net_thread_num(3),
         io_thread_num(3),
-        nonblocking_io_thread_num(3)
+        nonblocking_io_thread_num(3),
+        infrastructure_dc_cache_update_period(150),
+        infrastructure_dc_cache_valid_time(604800),
+        inventory_worker_timeout(5)
     {
         metadata.options.connectTimeoutMS = 5000;
     }
@@ -55,12 +59,17 @@ struct Config
     uint64_t forbidden_dht_groups;
     uint64_t forbidden_unmatched_group_total_space;
     uint64_t forbidden_ns_without_settings;
+    uint64_t forbidden_dc_sharing_among_groups;
     uint64_t reserved_space;
     uint64_t node_backend_stat_stale_timeout;
     uint64_t dnet_log_mask;
     uint64_t net_thread_num;
     uint64_t io_thread_num;
     uint64_t nonblocking_io_thread_num;
+    uint64_t infrastructure_dc_cache_update_period;
+    uint64_t infrastructure_dc_cache_valid_time;
+    uint64_t inventory_worker_timeout;
+    std::string app_name;
     std::string cache_group_path_prefix;
     std::vector<NodeInfo> nodes;
 
@@ -72,6 +81,9 @@ struct Config
         struct {
             std::string db;
         } history;
+        struct {
+            std::string db;
+        } inventory;
         struct {
             std::string db;
         } jobs;
@@ -90,12 +102,15 @@ inline std::ostream & operator << (std::ostream & ostr, const Config & config)
         "forbidden_dht_groups: "                  << config.forbidden_dht_groups << "\n"
         "forbidden_unmatched_group_total_space: " << config.forbidden_unmatched_group_total_space << "\n"
         "forbidden_ns_without_settings: "         << config.forbidden_ns_without_settings << "\n"
+        "forbidden_dc_sharing_among_groups: "     << config.forbidden_dc_sharing_among_groups << "\n"
         "reserved_space: "                        << config.reserved_space << "\n"
         "node_backend_stat_stale_timeout: "       << config.node_backend_stat_stale_timeout << "\n"
         "dnet_log_mask: "                         << config.dnet_log_mask << "\n"
         "net_thread_num: "                        << config.net_thread_num << "\n"
         "io_thread_num: "                         << config.io_thread_num << "\n"
         "nonblocking_io_thread_num: "             << config.nonblocking_io_thread_num << "\n"
+        "infrastructure_dc_cache_update_period: " << config.infrastructure_dc_cache_update_period << "\n"
+        "infrastructure_dc_cache_valid_time: "    << config.infrastructure_dc_cache_valid_time << "\n"
         "metadata: {\n"
         "  url: "                                 << config.metadata.url << "\n"
         "  options: {\n"
@@ -104,10 +119,14 @@ inline std::ostream & operator << (std::ostream & ostr, const Config & config)
         "  history: {\n"
         "    db: "                                << config.metadata.history.db << "\n"
         "  }\n"
+        "  inventory: {\n"
+        "    db: "                                << config.metadata.inventory.db << "\n"
+        "  }\n"
         "  jobs: {\n"
         "    db: "                                << config.metadata.jobs.db << "\n"
         "  }\n"
         "}\n"
+        "app_name: "                              << config.app_name << "\n"
         "cache_group_path_prefix: "               << config.cache_group_path_prefix << "\n"
         "nodes:\n";
     for (const Config::NodeInfo & node : config.nodes)

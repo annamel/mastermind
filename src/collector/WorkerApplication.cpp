@@ -56,19 +56,19 @@ void load_config()
 
     if (s_config.reserved_space == 0)
         throw std::runtime_error("Incorrect value 0 for reserved_space");
+
+    if (s_config.app_name.empty())
+        s_config.app_name = "mastermind";
 }
 
 } // unnamed namespace
 
 WorkerApplication::WorkerApplication()
     :
-    m_collector(*this),
     m_initialized(false)
 {}
 
 WorkerApplication::WorkerApplication(cocaine::framework::dispatch_t & d)
-    :
-    m_collector(*this)
 {
     init();
 

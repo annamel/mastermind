@@ -91,8 +91,7 @@ void Couple::update_status()
         return;
     }
 
-    // TODO: Uncomment as soon as Inventory is implemented.
-    if (/* app::config().forbidden_dc_sharing_among_groups */ false) {
+    if (app::config().forbidden_dc_sharing_among_groups) {
         if (check_dc_sharing() != 0)
             return;
     }
@@ -294,9 +293,7 @@ int Couple::check_dc_sharing()
                 m_status = BAD;
                 m_status_text = ostr.str();
 
-                // TODO: uncomment when app::logger() will be available
-                // BH_LOG(app::logger(), DNET_LOG_ERROR, "%s", ostr.str().c_str());
-
+                BH_LOG(app::logger(), DNET_LOG_ERROR, "%s", ostr.str());
                 return -1;
             }
             dcs.push_back(dc);

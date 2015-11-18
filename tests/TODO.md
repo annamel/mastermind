@@ -249,3 +249,38 @@ groups.
   then with one incorrect (lacking fields/wrong field type).
   6. *Two and three nodes*. Try 2 and 3 audit records and check whether
   the most recent record is selected.
+
+#### Inventory:
+* **TODO**: Primarily tests should cover communication with MongoDB,
+  and scheduling.
+  **Communication with MongoDB**. Connectivity, object interpretation,
+  creating and updating new entries. Entries which were not present in
+  cache should be added. Check for duplicates.
+* **MongoDB cache update**.
+  1. *Failed query*. Find request failed during cache update.
+  2. *Timeout*. Inventory worker timeouts during cache update.
+  3. *Unavailable*. Inventory is unavailable.
+  4. *New value*. Got a new value from inventory worker, put mongo record
+  update task into queue.
+* **MongoDB record update**.
+  1. *Update succeeded*.
+  2. *Update failed*.
+  **Scheduling**. Check if events are properly scheduled: a) re-collection
+  of items b) update of expired records.
+* **Round**. Test basic inventory use cases (actions performed during round).
+  1. *Cached*. Host is in memory cache.
+  2. *Connection error*. Host is not in memory cache, request fails due to
+  connection error.
+  3. *Timeout*. Host is not in memory cache, request fails by timeout.
+  4. *Fetched from cocaine*. Host is not in memory cache, request to cocaine
+  succeeds.
+* **Cocaine client**. Test should check whether cocaine worker is properly
+  requested.
+  1. *Cold start*. No cache in MongoDB, first call. Inventory should call
+  cocaine.
+  2. *Subsequent requests*. Ask for the same host after previous test.
+  Application should not call cocaine.
+  3. *Cached by MongoDB*. Application should not go to cocaine when host
+  information is up-to-date.
+  4. *Expired*. DB has a record expired by
+  'infrastructure_dc_cache_valid_time'. Application should call cocaine.
