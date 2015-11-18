@@ -188,10 +188,13 @@ void Round::step2_1_jobs_and_history(void *arg)
         builder.append("type", 1);
         mongo::BSONObj jobs_fields = builder.obj();
 
+        // Read preference PrimaryPreferred lets us read when primary is unavailable.
+        // Write is only possible when primary is available (elections completed).
+
         std::unique_ptr<mongo::DBClientCursor> cursor(conn->query(config.metadata.jobs.db + ".jobs",
                 MONGO_QUERY("status" << mongo::NE << "completed"
                          << "status" << mongo::NE << "cancelled").readPref(
-                             mongo::ReadPreference_PrimaryOnly, mongo::BSONArray()),
+                             mongo::ReadPreference_PrimaryPreferred, mongo::BSONArray()),
                 0, 0, &jobs_fields).release());
 
         uint64_t ts = 0;
@@ -235,7 +238,7 @@ void Round::step2_1_jobs_and_history(void *arg)
         // Load all entries newer than previously examined.
         cursor = conn->query(config.metadata.history.db + ".history",
                 MONGO_QUERY("nodes.timestamp" << mongo::GT << previous_ts).readPref(
-                        mongo::ReadPreference_PrimaryOnly, mongo::BSONArray()));
+                        mongo::ReadPreference_PrimaryPreferred, mongo::BSONArray()));
 
         while (cursor->more()) {
             mongo::BSONObj obj = cursor->next();
