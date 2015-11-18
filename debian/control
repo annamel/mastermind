@@ -5,7 +5,7 @@ Maintainer: Andrey Godin <agodin@yandex-team.ru>
 Build-Depends: debhelper (>= 8.0.0), cdbs, python, python-central, cmake, pkg-config, libc6-dev,
         librapidjson1, libcurl4-openssl-dev | libcurl4-gnutls-dev | libcurl4-nss-dev, yandex-libdispatch0,
         elliptics-dev, libcocaine-dev, cocaine-framework-native-dev, libboost-system-dev, libboost-program-options-dev,
-        libkqueue-dev (>= 0.9.2), libpthread-workqueue-dev, python-setuptools, bash-completion
+        libkqueue-dev (>= 0.9.2), libpthread-workqueue-dev, python-setuptools, bash-completion, yandex-mongo-cxx-driver-dev
 Standards-Version: 3.9.2
 Homepage: https://github.com/toshic/mastermind
 Vcs-Git: git://github.com/toshic/mastermind.git
@@ -32,7 +32,7 @@ Description: Common components and a client library for Mastermind
 Package: mastermind-collector
 Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}, cocaine-tools (<< 0.12), cocaine-runtime (<< 0.12), libcurl3,
-        yandex-libdispatch0, elliptics-client, cocaine-framework-native, libkqueue0 (>= 0.9.2), libpthread-workqueue0
+        yandex-libdispatch0, elliptics-client, cocaine-framework-native, libkqueue0 (>= 0.9.2), libpthread-workqueue0, yandex-mongo-cxx-driver
 Description: Elliptics storage statistics collector
 
 Package: mastermind-cocaine
