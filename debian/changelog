@@ -1,3 +1,14 @@
+mastermind (2.25.35-col) trusty; urgency=medium
+
+  * Inventory
+  * Group history
+  * Jobs
+  * I/O rate calculation
+  * Fix status calculation
+  * Minor fixes and improvements
+
+ -- Vladimir Nikulichev <saturnus@yandex-team.ru>  Wed, 18 Nov 2015 19:22:00 +0300
+
 mastermind (2.25.34-col) trusty; urgency=medium
 
   * Bugfixing
