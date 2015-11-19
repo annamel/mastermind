@@ -889,6 +889,21 @@ void Storage::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
             node.print_json(writer, entries.backends, entries.filesystems,
                     !!(item_types & Filter::Backend), !!(item_types & Filter::FS), show_internals);
         writer.EndArray();
+    } else {
+        if (!entries.backends.empty()) {
+            writer.Key("backends");
+            writer.StartArray();
+            for (Backend & backend : entries.backends)
+                backend.print_json(writer, show_internals);
+            writer.EndArray();
+        }
+        if (!entries.filesystems.empty()) {
+            writer.Key("filesystems");
+            writer.StartArray();
+            for (FS & fs : entries.filesystems)
+                fs.print_json(writer, show_internals);
+            writer.EndArray();
+        }
     }
 
     if (!entries.groups.empty()) {
