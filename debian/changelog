@@ -1,3 +1,9 @@
+mastermind (2.25.36-col) trusty; urgency=medium
+
+  * Fixed snapshot for backends and filesystems
+
+ -- Vladimir Nikulichev <saturnus@yandex-team.ru>  Wed, 19 Nov 2015 20:45:07 +0300
+
 mastermind (2.25.35-col) trusty; urgency=medium
 
   * Inventory
