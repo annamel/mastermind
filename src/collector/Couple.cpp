@@ -56,15 +56,19 @@ void Couple::update_status()
     for (const Group & group : m_groups) {
         if (!group.get_metadata().version) {
             m_status = BAD;
-            ostr << "Group " << group.get_id() << " has empty metadata.";
-            m_status_text = ostr.str();
+            if (!account_job_in_status()) {
+                ostr << "Group " << group.get_id() << " has empty metadata.";
+                m_status_text = ostr.str();
+            }
             return;
         }
         if (m_namespace.get().get_id() != group.get_metadata().namespace_name) {
             m_status = BAD;
-            ostr << "Couple's namespace '" << m_namespace.get().get_id() << "' doesn't match group's "
-                    "namespace '" << group.get_metadata().namespace_name << "'.";
-            m_status_text = ostr.str();
+            if (!account_job_in_status()) {
+                ostr << "Couple's namespace '" << m_namespace.get().get_id() << "' doesn't match group's "
+                        "namespace '" << group.get_metadata().namespace_name << "'.";
+                m_status_text = ostr.str();
+            }
             return;
         }
     }
