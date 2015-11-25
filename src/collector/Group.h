@@ -19,6 +19,7 @@
 #ifndef __046c58ff_e6c4_49a6_a920_eee87b111685
 #define __046c58ff_e6c4_49a6_a920_eee87b111685
 
+#include <blackhole/attribute.hpp>
 #include <functional>
 #include <iostream>
 #include <rapidjson/writer.h>
@@ -170,6 +171,8 @@ private:
 
 private:
     int m_id;
+
+    blackhole::log::attributes_t m_attr;
 
     // Set of references to backends serving this group. They shouldn't be
     // modified directly but only used to obtain related items and calculate the

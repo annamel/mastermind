@@ -29,6 +29,7 @@
 #include "Node.h"
 #include "Storage.h"
 
+#include <blackhole/scoped_attributes.hpp>
 #include <msgpack.hpp>
 
 #include <algorithm>
@@ -79,7 +80,9 @@ Group::Group(int id)
     m_active_job(nullptr),
     m_type(DATA),
     m_status(INIT)
-{}
+{
+    m_attr = { blackhole::attribute::make(std::string("group"), m_id) };
+}
 
 bool Group::full(double reserved_space) const
 {
@@ -130,21 +133,32 @@ const Job & Group::get_active_job() const
 
 void Group::add_backend(Backend & backend)
 {
+    blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
+    BH_LOG(app::logger(), DNET_LOG_DEBUG, "Add backend %s", backend.get_key());
+
     m_backends.insert(backend);
 }
 
 void Group::remove_backend(Backend & backend)
 {
+    blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
+    BH_LOG(app::logger(), DNET_LOG_DEBUG, "Remove backend %s", backend.get_key());
+
     m_backends.erase(backend);
 }
 
 void Group::apply(const GroupHistoryEntry & entry)
 {
+    blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
+    BH_LOG(app::logger(), DNET_LOG_DEBUG,
+            "Applying history entry with timestamp %f", entry.get_timestamp());
+
     auto & backends = entry.get_backends();
     bool changed = false;
     for (Backends::iterator it = m_backends.begin(); it != m_backends.end();) {
         const std::string & key = it->get().get_key();
         if (backends.find(key) == backends.end()) {
+            BH_LOG(app::logger(), DNET_LOG_DEBUG, "Removing backend %s", key);
             m_backends.erase(it++);
             changed = true;
         } else {
@@ -161,8 +175,9 @@ void Group::apply(const GroupHistoryEntry & entry)
 
 void Group::handle_metadata_download_failed(const std::string & why)
 {
-    BH_LOG(app::logger(), DNET_LOG_ERROR,
-            "Group %d: Metadata download failed: %s", m_id, why.c_str());
+    blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
+    BH_LOG(app::logger(), DNET_LOG_ERROR, "Metadata download failed: %s", why.c_str());
+
     m_metadata.clear();
     m_clean = true;
 }
@@ -319,6 +334,8 @@ int Group::parse_metadata()
         m_clean = true;
         m_status_text = ostr.str();
         m_status = BAD;
+
+        blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
         BH_LOG(app::logger(), DNET_LOG_ERROR, "Metadata parse error: %s", m_status_text.c_str());
         return -1;
     }

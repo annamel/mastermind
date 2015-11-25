@@ -138,16 +138,22 @@ void Storage::add_node(const Host & host, int port, int family)
 
 void Storage::handle_backend(Backend & backend)
 {
+    BH_LOG(app::logger(), DNET_LOG_DEBUG, "Storage: Handle backend %s", backend.get_key());
+
     auto it = m_groups.lower_bound(backend.get_stat().group);
 
     if (it != m_groups.end() && it->first == int(backend.get_stat().group)) {
+        BH_LOG(app::logger(), DNET_LOG_DEBUG, "Adding backend to group %lu", backend.get_stat().group);
         it->second.add_backend(backend);
     } else {
+        BH_LOG(app::logger(), DNET_LOG_DEBUG, "New group %lu", backend.get_stat().group);
         it = m_groups.insert(it, std::make_pair(backend.get_stat().group, Group(backend.get_stat().group)));
         it->second.add_backend(backend);
     }
 
     if (backend.group_changed()) {
+        BH_LOG(app::logger(), DNET_LOG_DEBUG, "Backend group changed");
+
         int old_id = backend.get_old_group_id();
         auto it_old = m_groups.find(old_id);
         if (it_old != m_groups.end()) {
