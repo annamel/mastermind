@@ -154,6 +154,11 @@ void Round::step2_1_jobs_and_history(void *arg)
 
     Stopwatch watch(self.m_clock.mongo);
 
+    // This is an approximate point of time we started collecting statistics.
+    // It will be used to filter history entries.
+    uint64_t start_ts = 0;
+    clock_get_real(start_ts);
+
     try {
         const Config & config = app::config();
 
@@ -229,9 +234,11 @@ void Round::step2_1_jobs_and_history(void *arg)
 
         // History
 
-        uint64_t group_history_ts = 0;
-        clock_get_real(group_history_ts);
-        double previous_ts = self.m_storage->get_group_history_ts() / 1000000000ULL;
+        double previous_ts;
+        if (self.m_storage->get_group_history_ts() > 0)
+            previous_ts = self.m_storage->get_group_history_ts() / 1000000000ULL;
+        else
+            previous_ts = start_ts / 1000000000ULL;
 
         std::vector<GroupHistoryEntry> group_history;
 
@@ -267,7 +274,7 @@ void Round::step2_1_jobs_and_history(void *arg)
 
         BH_LOG(app::logger(), DNET_LOG_INFO, "Loaded %lu group history entries", group_history.size());
 
-        self.m_storage->save_group_history(std::move(group_history), group_history_ts);
+        self.m_storage->save_group_history(std::move(group_history), start_ts);
 
     } catch (const mongo::DBException & e) {
         BH_LOG(app::logger(), DNET_LOG_ERROR,

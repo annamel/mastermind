@@ -97,7 +97,7 @@ Storage::Storage()
 Storage::Storage(const Storage & other)
     :
     m_jobs_timestamp(0),
-    m_group_history_ts(0)
+    m_group_history_ts(other.m_group_history_ts)
 {
     bool have_newer;
     merge(other, have_newer);
@@ -215,13 +215,6 @@ void Storage::update_group_structure()
 {
     BH_LOG(app::logger(), DNET_LOG_INFO, "Updating group structure");
 
-    for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
-        Node & node = it->second;
-        std::vector<std::reference_wrapper<Backend>> backends = node.pick_new_backends();
-        for (Backend & backend : backends)
-            handle_backend(backend);
-    }
-
     for (const GroupHistoryEntry & entry : m_group_history) {
         auto it = m_groups.find(entry.get_group_id());
         if (it != m_groups.end()) {
@@ -230,6 +223,13 @@ void Storage::update_group_structure()
             BH_LOG(app::logger(), DNET_LOG_DEBUG, "History database contains record for "
                     "unknown group %d", entry.get_group_id());
         }
+    }
+
+    for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
+        Node & node = it->second;
+        std::vector<std::reference_wrapper<Backend>> backends = node.pick_new_backends();
+        for (Backend & backend : backends)
+            handle_backend(backend);
     }
 }
 
