@@ -427,8 +427,6 @@ const char *Couple::status_str(Status status)
         return "BAD";
     case BROKEN:
         return "BROKEN";
-    case RO:
-        return "RO";
     case FROZEN:
         return "FROZEN";
     case MIGRATING:

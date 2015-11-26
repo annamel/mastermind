@@ -43,7 +43,6 @@ public:
         FULL,
         BAD,
         BROKEN,
-        RO,
         FROZEN,
         MIGRATING,
         SERVICE_ACTIVE,
