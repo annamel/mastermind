@@ -41,7 +41,7 @@ struct Config
         forbidden_unmatched_group_total_space(0),
         forbidden_ns_without_settings(0),
         forbidden_dc_sharing_among_groups(0),
-        reserved_space(105 << 30), // 105G is the default space for reservation
+        reserved_space(105ULL << 30), // 105G
         node_backend_stat_stale_timeout(120),
         dnet_log_mask(3),
         net_thread_num(3),
