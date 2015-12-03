@@ -40,9 +40,9 @@ void load_config()
 {
     ConfigParser parser(s_config);
 
-    FILE *f = fopen(Config::config_file, "rb");
+    FILE *f = fopen(Config::Default::config_file, "rb");
     if (f == nullptr)
-        throw std::runtime_error(std::string("Cannot open ") + Config::config_file);
+        throw std::runtime_error(std::string("Cannot open ") + Config::Default::config_file);
 
     static char buf[65536];
     rapidjson::FileReadStream is(f, buf, sizeof(buf));
@@ -52,7 +52,7 @@ void load_config()
     fclose(f);
 
     if (!parser.good())
-        throw std::runtime_error(std::string("Error parsing ") + Config::config_file);
+        throw std::runtime_error(std::string("Error parsing ") + Config::Default::config_file);
 
     if (s_config.reserved_space == 0)
         throw std::runtime_error("Incorrect value 0 for reserved_space");
@@ -90,13 +90,12 @@ void WorkerApplication::init()
     load_config();
 
     s_logger.reset(new ioremap::elliptics::file_logger(
-            Config::log_file, ioremap::elliptics::log_level(s_config.dnet_log_mask)));
+            Config::Default::log_file, ioremap::elliptics::log_level(s_config.dnet_log_mask)));
 
     s_elliptics_logger.reset(new ioremap::elliptics::file_logger(
-            Config::elliptics_log_file, ioremap::elliptics::log_level(s_config.dnet_log_mask)));
+            Config::Default::elliptics_log_file, ioremap::elliptics::log_level(s_config.dnet_log_mask)));
 
-    const char *config_file = Config::config_file;
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Loaded config from %s:\n%s", config_file, s_config);
+    BH_LOG(app::logger(), DNET_LOG_INFO, "Loaded config from %s:\n%s", Config::Default::config_file, s_config);
 
     if (m_collector.init())
         throw std::runtime_error("failed to initialize collector");

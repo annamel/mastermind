@@ -7,6 +7,7 @@ add_executable(mastermind-collector
     Filter.cpp Round.cpp Collector.cpp Job.cpp main.cpp
     GroupHistoryEntry.cpp
     Inventory.cpp
+    Config.cpp
     )
 
 target_link_libraries(mastermind-collector
