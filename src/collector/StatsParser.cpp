@@ -77,6 +77,11 @@ const uint64_t Backends                           = 2ULL;
                     const uint64_t CommandSource  = 0x800ULL;
                         const uint64_t Size       = 0x1000ULL;
                         const uint64_t Time       = 0x2000ULL;
+        const uint64_t Io                         = 0x80ULL;
+            const uint64_t Blocking               = 0x100ULL;
+//                             CurrentSize        = 0x400ULL;
+            const uint64_t Nonblocking            = 0x200ULL;
+                const uint64_t CurrentSize        = 0x400ULL;
 
 const uint64_t Timestamp  = 4ULL;
     const uint64_t TvSec  = 8ULL;
@@ -117,6 +122,7 @@ std::vector<Parser::FolderVector> backend_folders = {
         { "backend_id",     Backends|BackendFolder, BackendId     },
         { "status",         Backends|BackendFolder, Status        },
         { "commands",       Backends|BackendFolder, Commands      },
+        { "io",             Backends|BackendFolder, Io            },
         { "la",             Procfs|Vm,              La            },
         { "net_interfaces", Procfs|Net,             NetInterfaces },
         { "count",          Stats|StatName,         Count         }
@@ -133,6 +139,8 @@ std::vector<Parser::FolderVector> backend_folders = {
         { "last_start",      Backends|BackendFolder|Status,   LastStart        },
         { "WRITE",           Backends|BackendFolder|Commands, Write            },
         { NOT_MATCH "WRITE", Backends|BackendFolder|Commands, NotWrite         },
+        { "blocking",        Backends|BackendFolder|Io,       Blocking         },
+        { "nonblocking",     Backends|BackendFolder|Io,       Nonblocking      },
         { NOT_MATCH "lo",    Procfs|Net|NetInterfaces,        NetInterfaceName }
     },
     {
@@ -165,6 +173,8 @@ std::vector<Parser::FolderVector> backend_folders = {
         { "disk",                 Backends|BackendFolder|Commands|Write,       Disk               },
         { "cache",                Backends|BackendFolder|Commands|NotWrite,    Cache              },
         { "disk",                 Backends|BackendFolder|Commands|NotWrite,    Disk               },
+        { "current_size",         Backends|BackendFolder|Io|Blocking,          CurrentSize        },
+        { "current_size",         Backends|BackendFolder|Io|Nonblocking,       CurrentSize        },
         { "receive",              Procfs|Net|NetInterfaces|NetInterfaceName,   Receive            },
         { "transmit",             Procfs|Net|NetInterfaces|NetInterfaceName,   Transmit           }
     },
@@ -229,6 +239,8 @@ Parser::UIntInfoVector backend_uint_info = {
     { Backends|BackendFolder|Commands|NotWrite|Cache|CommandSource|Time,  SUM, BOFF(ell_cache_read_time)  },
     { Backends|BackendFolder|Commands|NotWrite|Disk|CommandSource|Size,   SUM, BOFF(ell_disk_read_size)   },
     { Backends|BackendFolder|Commands|NotWrite|Disk|CommandSource|Time,   SUM, BOFF(ell_disk_read_time)   },
+    { Backends|BackendFolder|Io|Blocking|CurrentSize,                     SET, BOFF(io_blocking_size)     },
+    { Backends|BackendFolder|Io|Nonblocking|CurrentSize,                  SET, BOFF(io_nonblocking_size)  },
     { Timestamp|TvSec,                                                    SET, NOFF(ts_sec)               },
     { Timestamp|TvUsec,                                                   SET, NOFF(ts_usec)              },
     { Procfs|Vm|La,                                                       SET, NOFF(la1)                  },

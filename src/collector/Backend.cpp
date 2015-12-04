@@ -66,7 +66,9 @@ BackendStat::BackendStat()
     ell_cache_read_size(0),
     ell_cache_read_time(0),
     ell_disk_read_size(0),
-    ell_disk_read_time(0)
+    ell_disk_read_time(0),
+    io_blocking_size(0),
+    io_nonblocking_size(0)
 {}
 
 CommandStat::CommandStat()
@@ -360,6 +362,8 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //     "free_space": 3035659162,
     //     "fsid": 8323278684798404738,
     //     "group": 83,
+    //     "io_blocking_size": 0,
+    //     "io_nonblocking_size": 0,
     //     "last_start": {
     //         "ts_sec": 1444498430,
     //         "ts_usec": 864588

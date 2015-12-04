@@ -85,6 +85,10 @@ struct BackendStat
     uint64_t ell_disk_read_size;
     uint64_t ell_disk_read_time;
 
+    // TODO: Use handystats counters.
+    uint64_t io_blocking_size;
+    uint64_t io_nonblocking_size;
+
     std::string data_path;
     std::string file_path;
 };
