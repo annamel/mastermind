@@ -31,8 +31,10 @@
 class Backend;
 class Couple;
 class Filter;
+class FS;
 class GroupHistoryEntry;
 class Namespace;
+class Node;
 class Storage;
 
 class Group
