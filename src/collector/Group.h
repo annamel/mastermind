@@ -83,7 +83,6 @@ public:
 
 public:
     Group(int id);
-    Group();
 
     int get_id() const
     { return m_id; }
