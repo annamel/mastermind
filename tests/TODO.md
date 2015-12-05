@@ -74,6 +74,7 @@ functional unit or feature. The format of list is as follows:
   1. *Default settings*. No reserved space. Check result with empty, non-empty,
   and full backend.
   2. *Non-zero reserved space*. Repeat calculations with reserved space 0.5.
+* **Commands stat**. Verify commands stat calculation (see docs).
 
 #### Couple:
 

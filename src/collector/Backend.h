@@ -98,10 +98,12 @@ struct CommandStat
     void clear();
     CommandStat & operator += (const CommandStat & other);
 
-    double disk_read_rate;
-    double disk_write_rate;
-    double net_read_rate;
-    double net_write_rate;
+    void print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer) const;
+
+    double ell_disk_read_rate;
+    double ell_disk_write_rate;
+    double ell_net_read_rate;
+    double ell_net_write_rate;
 };
 
 class Backend

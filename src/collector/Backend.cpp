@@ -85,35 +85,57 @@ void CommandStat::calculate(const BackendStat & old_stat, const BackendStat & ne
     int64_t cache_read = int64_t(new_stat.ell_cache_read_size) - int64_t(old_stat.ell_cache_read_size);
     int64_t cache_written = int64_t(new_stat.ell_cache_write_size) - int64_t(old_stat.ell_cache_write_size);
 
-    if (disk_read > 0) {
-        disk_read_rate = double(disk_read) / dt;
-        if (cache_read > 0)
-            net_read_rate = double(disk_read + cache_read) / dt;
+    if (disk_read >= 0) {
+        ell_disk_read_rate = double(disk_read) / dt;
+        if (cache_read >= 0)
+            ell_net_read_rate = double(disk_read + cache_read) / dt;
     }
 
-    if (disk_written > 0) {
-        disk_write_rate = double(disk_written) / dt;
-        if (cache_written > 0)
-            net_write_rate = double(disk_written + cache_written) / dt;
+    if (disk_written >= 0) {
+        ell_disk_write_rate = double(disk_written) / dt;
+        if (cache_written >= 0)
+            ell_net_write_rate = double(disk_written + cache_written) / dt;
     }
 }
 
 void CommandStat::clear()
 {
-    disk_read_rate = 0.0;
-    disk_write_rate = 0.0;
-    net_read_rate = 0.0;
-    net_write_rate = 0.0;
+    ell_disk_read_rate = 0.0;
+    ell_disk_write_rate = 0.0;
+    ell_net_read_rate = 0.0;
+    ell_net_write_rate = 0.0;
 }
 
 CommandStat & CommandStat::operator += (const CommandStat & other)
 {
-    disk_read_rate += other.disk_read_rate;
-    disk_write_rate += other.disk_write_rate;
-    net_read_rate += other.net_read_rate;
-    net_write_rate += other.net_write_rate;
+    ell_disk_read_rate += other.ell_disk_read_rate;
+    ell_disk_write_rate += other.ell_disk_write_rate;
+    ell_net_read_rate += other.ell_net_read_rate;
+    ell_net_write_rate += other.ell_net_write_rate;
 
     return *this;
+}
+
+void CommandStat::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer) const
+{
+    // JSON looks like this:
+    // {
+    //     "ell_disk_read_rate": 0.0,
+    //     "ell_disk_write_rate": 0.0,
+    //     "ell_net_read_rate": 0.0,
+    //     "ell_net_write_rate": 0.0
+    // }
+
+    writer.StartObject();
+        writer.Key("ell_disk_read_rate");
+        writer.Double(ell_disk_read_rate);
+        writer.Key("ell_disk_write_rate");
+        writer.Double(ell_disk_write_rate);
+        writer.Key("ell_net_read_rate");
+        writer.Double(ell_net_read_rate);
+        writer.Key("ell_net_write_rate");
+        writer.Double(ell_net_write_rate);
+    writer.EndObject();
 }
 
 Backend::Backend(Node & node)
@@ -324,6 +346,12 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //     "base_size": 2333049958,
     //     "blob_size": 53687091200,
     //     "blob_size_limit": 5368709120,
+    //     "commands_stat": {
+    //         "ell_disk_read_rate": 0.0,
+    //         "ell_disk_write_rate": 0.0,
+    //         "ell_net_read_rate": 0.0,
+    //         "ell_net_write_rate": 0.0
+    //     }
     //     "defrag_state": 0,
     //     "effective_free_space": 2728233006,
     //     "effective_space": 5061282964,
@@ -465,31 +493,8 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     writer.Uint64(m_stat.last_start_ts_usec);
     writer.EndObject();
 
-    writer.Key("ell_cache_write_size");
-    writer.Uint64(m_stat.ell_cache_write_size);
-    writer.Key("ell_cache_write_time");
-    writer.Uint64(m_stat.ell_cache_write_time);
-    writer.Key("ell_disk_write_size");
-    writer.Uint64(m_stat.ell_disk_write_size);
-    writer.Key("ell_disk_write_time");
-    writer.Uint64(m_stat.ell_disk_write_time);
-    writer.Key("ell_cache_read_size");
-    writer.Uint64(m_stat.ell_cache_read_size);
-    writer.Key("ell_cache_read_time");
-    writer.Uint64(m_stat.ell_cache_read_time);
-    writer.Key("ell_disk_read_size");
-    writer.Uint64(m_stat.ell_disk_read_size);
-    writer.Key("ell_disk_read_time");
-    writer.Uint64(m_stat.ell_disk_read_time);
-
-    writer.Key("disk_read_rate");
-    writer.Double(m_calculated.command_stat.disk_read_rate);
-    writer.Key("disk_write_rate");
-    writer.Double(m_calculated.command_stat.disk_write_rate);
-    writer.Key("net_read_rate");
-    writer.Double(m_calculated.command_stat.net_read_rate);
-    writer.Key("net_write_rate");
-    writer.Double(m_calculated.command_stat.net_write_rate);
+    writer.Key("commands_stat");
+    m_calculated.command_stat.print_json(writer);
 
     writer.Key("read_only");
     writer.Bool(!!m_stat.read_only);
