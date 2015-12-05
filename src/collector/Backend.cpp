@@ -85,15 +85,15 @@ void CommandStat::calculate(const BackendStat & old_stat, const BackendStat & ne
     int64_t cache_read = int64_t(new_stat.ell_cache_read_size) - int64_t(old_stat.ell_cache_read_size);
     int64_t cache_written = int64_t(new_stat.ell_cache_write_size) - int64_t(old_stat.ell_cache_write_size);
 
-    if (disk_read > 0) {
+    if (disk_read >= 0) {
         disk_read_rate = double(disk_read) / dt;
-        if (cache_read > 0)
+        if (cache_read >= 0)
             net_read_rate = double(disk_read + cache_read) / dt;
     }
 
-    if (disk_written > 0) {
+    if (disk_written >= 0) {
         disk_write_rate = double(disk_written) / dt;
-        if (cache_written > 0)
+        if (cache_written >= 0)
             net_write_rate = double(disk_written + cache_written) / dt;
     }
 }
