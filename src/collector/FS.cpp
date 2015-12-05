@@ -214,6 +214,12 @@ void FS::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //         "tv_usec": 615421,
     //         "user_friendly": "2015-10-20 16:48:56.615421"
     //     },
+    //     "commands_stat": {
+    //         "ell_disk_read_rate": 0.0,
+    //         "ell_disk_write_rate": 0.0,
+    //         "ell_net_read_rate": 0.0,
+    //         "ell_net_write_rate": 0.0
+    //     }
     //     "node": "::1:1025:10",
     //     "fsid": 158919948,
     //     "total_space": 983547510784,
@@ -268,14 +274,8 @@ void FS::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     writer.Key("disk_write_rate");
     writer.Double(m_calculated.disk_write_rate);
 
-    writer.Key("disk_read_rate");
-    writer.Double(m_calculated.command_stat.disk_read_rate);
-    writer.Key("disk_write_rate");
-    writer.Double(m_calculated.command_stat.disk_write_rate);
-    writer.Key("net_read_rate");
-    writer.Double(m_calculated.command_stat.net_read_rate);
-    writer.Key("net_write_rate");
-    writer.Double(m_calculated.command_stat.net_write_rate);
+    writer.Key("commands_stat");
+    m_calculated.command_stat.print_json(writer);
 
     writer.EndObject();
 }

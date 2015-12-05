@@ -350,14 +350,8 @@ void Node::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     writer.Key("rx_rate");
     writer.Double(m_stat.rx_rate);
 
-    writer.Key("disk_read_rate");
-    writer.Double(m_command_stat.disk_read_rate);
-    writer.Key("disk_write_rate");
-    writer.Double(m_command_stat.disk_write_rate);
-    writer.Key("net_read_rate");
-    writer.Double(m_command_stat.net_read_rate);
-    writer.Key("net_write_rate");
-    writer.Double(m_command_stat.net_write_rate);
+    writer.Key("commands_stat");
+    m_command_stat.print_json(writer);
 
     if (show_internals) {
         writer.Key("la");
