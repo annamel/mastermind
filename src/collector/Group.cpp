@@ -147,18 +147,16 @@ void Group::remove_backend(Backend & backend)
     m_backends.erase(backend);
 }
 
-void Group::apply(const GroupHistoryEntry & entry)
+void Group::update_backends(const std::vector<std::string> & backends, uint64_t timestamp)
 {
     blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
     BH_LOG(app::logger(), DNET_LOG_DEBUG,
-            "Applying history entry with timestamp %f", entry.get_timestamp());
+            "Applying history entry with timestamp %lu", timestamp);
 
-    auto & backends = entry.get_backends();
     bool changed = false;
     for (Backends::iterator it = m_backends.begin(); it != m_backends.end();) {
         const std::string & key = it->get().get_key();
-        if (backends.find(key) == backends.end()) {
-            BH_LOG(app::logger(), DNET_LOG_DEBUG, "Removing backend %s", key);
+        if (std::find(backends.begin(), backends.end(), key) == backends.end()) {
             m_backends.erase(it++);
             changed = true;
         } else {
@@ -166,8 +164,8 @@ void Group::apply(const GroupHistoryEntry & entry)
         }
     }
     if (changed) {
-        if (double(m_update_time) < entry.get_timestamp())
-            m_update_time = entry.get_timestamp();
+        if (double(m_update_time) < timestamp)
+            m_update_time = timestamp;
         else
             m_update_time = clock_get_real();
     }

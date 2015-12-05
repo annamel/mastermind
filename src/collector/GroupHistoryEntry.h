@@ -23,6 +23,7 @@
 
 #include <set>
 #include <string>
+#include <tuple>
 
 // Sample history database entry:
 //
@@ -63,12 +64,15 @@
 class GroupHistoryEntry
 {
 public:
+    // Each tuple contains (hostname, port, family, backend_id)
+    typedef std::set<std::tuple<std::string, int, int, uint64_t>> Backends;
+
     GroupHistoryEntry(mongo::BSONObj & obj);
 
     int get_group_id() const
     { return m_group_id; }
 
-    const std::set<std::string> & get_backends() const
+    const Backends & get_backends() const
     { return m_backends; }
 
     double get_timestamp() const
@@ -87,7 +91,7 @@ private:
 
 private:
     int m_group_id;
-    std::set<std::string> m_backends;
+    Backends m_backends;
     double m_timestamp;
     bool m_empty;
 };

@@ -33,6 +33,7 @@
 #include <string>
 #include <vector>
 
+class GroupHistoryEntry;
 class Job;
 
 class Storage

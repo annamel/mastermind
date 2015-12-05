@@ -39,7 +39,7 @@ GroupHistoryEntry::GroupHistoryEntry(mongo::BSONObj & obj)
 
 void GroupHistoryEntry::parse_backend_history_entry(mongo::BSONObj & obj)
 {
-    std::set<std::string> backends;
+    Backends backends;
     double cur_ts = 0.0;
 
     // Insert the most recent backend.
@@ -56,14 +56,12 @@ void GroupHistoryEntry::parse_backend_history_entry(mongo::BSONObj & obj)
     for (mongo::BSONElement & back_elem : set) {
         // TODO: Check element types in database records created by mastermind
 
-        long backend_id = back_elem["backend_id"].Number();
+        uint64_t backend_id = back_elem["backend_id"].Number();
         std::string hostname = back_elem["hostname"].String();
         int port = back_elem["port"].Number();
         int family = back_elem["family"].Number();
 
-        std::ostringstream ostr;
-        ostr << hostname << ':' << port << ':' << family << '/' << backend_id;
-        backends.insert(ostr.str());
+        backends.insert(std::tie(hostname, port, family, backend_id));
     }
 
     m_backends.swap(backends);
@@ -80,8 +78,11 @@ std::string GroupHistoryEntry::to_string() const
             "  group_id: " << m_group_id << "\n"
             "  backends:\n"
             "  [\n";
-    for (const std::string & backend : m_backends)
-        ostr << "    " << backend << '\n';
+    for (auto & backend : m_backends)
+        ostr << "    " << std::get<0>(backend) << ':'
+                       << std::get<1>(backend) << ':'
+                       << std::get<2>(backend) << '/'
+                       << std::get<3>(backend)<< '\n';
     ostr << "  ]\n}";
 
     return ostr.str();

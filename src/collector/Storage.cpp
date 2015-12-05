@@ -215,13 +215,55 @@ void Storage::update_group_structure()
 {
     BH_LOG(app::logger(), DNET_LOG_INFO, "Updating group structure");
 
+    // m_hosts has address as a key, we need to cache mapping from hostname to address.
+    // TODO: This information must be provided by inventory.
+    std::map<std::string, std::string> name_addr;
+    if (!m_group_history.empty()) {
+        for (auto it = m_hosts.begin(); it != m_hosts.end(); ++it) {
+            const std::string & hostname = it->second.get_name();
+            if (hostname.empty())
+                continue;
+            name_addr[hostname] = it->first;
+        }
+    }
+
     for (const GroupHistoryEntry & entry : m_group_history) {
-        auto it = m_groups.find(entry.get_group_id());
+        int group_id = entry.get_group_id();
+
+        auto it = m_groups.find(group_id);
         if (it != m_groups.end()) {
-            it->second.apply(entry);
+            Group & group = it->second;
+
+            auto & entry_backends = entry.get_backends();
+            std::vector<std::string> backends;
+
+            for (auto & tup : entry_backends) {
+                std::string hostname = std::get<0>(tup);
+                int port = std::get<1>(tup);
+                int family = std::get<2>(tup);
+                uint64_t backend_id = std::get<3>(tup);
+
+                auto addr_it = name_addr.find(hostname);
+                if (addr_it == name_addr.end()) {
+                    BH_LOG(app::logger(), DNET_LOG_ERROR,
+                        "Unknown host %s in group %d history entry", hostname, group_id);
+                    continue;
+                }
+
+                std::string addr = addr_it->second;
+
+                std::ostringstream ostr;
+                ostr << addr_it->second << ':' << port << ':' << family << '/' << backend_id;
+                backends.push_back(ostr.str());
+
+                BH_LOG(app::logger(), DNET_LOG_INFO,
+                    "Host %s has address %s. Backend key is %s", hostname, addr_it->second, backends.back());
+            }
+
+            group.update_backends(backends, entry.get_timestamp());
         } else {
             BH_LOG(app::logger(), DNET_LOG_DEBUG, "History database contains record for "
-                    "unknown group %d", entry.get_group_id());
+                    "unknown group %d", group_id);
         }
     }
 
