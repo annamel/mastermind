@@ -69,21 +69,57 @@ void GroupHistoryEntry::parse_backend_history_entry(mongo::BSONObj & obj)
     m_empty = false;
 }
 
-std::string GroupHistoryEntry::to_string() const
+void GroupHistoryEntry::print_json(
+        rapidjson::Writer<rapidjson::StringBuffer> & writer) const
 {
-    std::ostringstream ostr;
+    // {
+    //     "timestamp": 1449822159,
+    //     "group_id": 31,
+    //     "backends": [
+    //         {
+    //             "hostname": "node1.example.com",
+    //             "port": 1025,
+    //             "family": 10,
+    //             "id": 101
+    //         },
+    //         {
+    //             "hostname": "node2.example.com",
+    //             "port": 1025,
+    //             "family": 10,
+    //             "id": 593
+    //         }
+    //     ]
+    // }
 
-    ostr << "{\n"
-            "  timestamp: " << m_timestamp << "\n"
-            "  group_id: " << m_group_id << "\n"
-            "  backends:\n"
-            "  [\n";
-    for (auto & backend : m_backends)
-        ostr << "    " << std::get<0>(backend) << ':'
-                       << std::get<1>(backend) << ':'
-                       << std::get<2>(backend) << '/'
-                       << std::get<3>(backend)<< '\n';
-    ostr << "  ]\n}";
+    writer.StartObject();
+    writer.Key("timestamp");
+    writer.Double(m_timestamp);
+    writer.Key("group_id");
+    writer.Int(m_group_id);
+    writer.Key("backends");
+    writer.StartArray();
+        for (const auto & backend : m_backends) {
+            writer.StartObject();
+            writer.Key("hostname");
+            writer.String(std::get<0>(backend).c_str());
+            writer.Key("port");
+            writer.Int(std::get<1>(backend));
+            writer.Key("family");
+            writer.Int(std::get<2>(backend));
+            writer.Uint64(std::get<3>(backend));
+            writer.EndObject();
+        }
+    writer.EndArray();
+    writer.EndObject();
+}
 
-    return ostr.str();
+std::ostream & operator << (std::ostream & ostr, const GroupHistoryEntry & entry)
+{
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
+
+    entry.print_json(writer);
+
+    ostr << buf.GetString();
+    return ostr;
 }

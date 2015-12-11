@@ -20,7 +20,9 @@
 #define __9aa43a1c_afa6_4bf7_a90c_b16d0ba55bb1
 
 #include <mongo/bson/bson.h>
+#include <rapidjson/writer.h>
 
+#include <ostream>
 #include <set>
 #include <string>
 #include <tuple>
@@ -84,7 +86,7 @@ public:
     bool empty() const
     { return m_empty; }
 
-    std::string to_string() const;
+    void print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer) const;
 
 private:
     void parse_backend_history_entry(mongo::BSONObj & obj);
@@ -95,6 +97,8 @@ private:
     double m_timestamp;
     bool m_empty;
 };
+
+std::ostream & operator << (std::ostream & ostr, const GroupHistoryEntry & entry);
 
 #endif
 
