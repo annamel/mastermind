@@ -27,6 +27,7 @@ add_library(collector_common STATIC ${COLLECTOR_SOURCES_COMMON})
 target_link_libraries(collector_common ${COLLECTOR_LIBRARIES})
 
 add_executable(mastermind-collector
+    Clock.cpp
     WorkerApplication.cpp
     main.cpp
     )
