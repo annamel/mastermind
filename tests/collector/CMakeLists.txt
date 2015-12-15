@@ -26,3 +26,5 @@ set(TEST_LIBRARIES
     ${GTEST_BOTH_LIBRARIES}
     collector_common
     util)
+
+add_subdirectory(config_parser)
