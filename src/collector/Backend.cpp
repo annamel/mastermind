@@ -244,7 +244,7 @@ void Backend::recalculate()
 void Backend::check_stalled()
 {
     uint64_t ts_now = 0;
-    clock_get(ts_now);
+    clock_get_real(ts_now);
     ts_now /= 1000000000ULL;
 
     if (ts_now <= m_stat.ts_sec) {
