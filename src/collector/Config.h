@@ -35,23 +35,23 @@ struct Config
 
     Config()
         :
-        monitor_port(10025),
-        wait_timeout(10),
-        forbidden_dht_groups(0),
-        forbidden_unmatched_group_total_space(0),
-        forbidden_ns_without_settings(0),
-        forbidden_dc_sharing_among_groups(0),
-        reserved_space(105ULL << 30), // 105G
-        node_backend_stat_stale_timeout(120),
-        dnet_log_mask(3),
-        net_thread_num(3),
-        io_thread_num(3),
-        nonblocking_io_thread_num(3),
-        infrastructure_dc_cache_update_period(150),
-        infrastructure_dc_cache_valid_time(604800),
-        inventory_worker_timeout(5)
+        monitor_port(Default::monitor_port),
+        wait_timeout(Default::wait_timeout),
+        forbidden_dht_groups(Default::forbidden_dht_groups),
+        forbidden_unmatched_group_total_space(Default::forbidden_unmatched_group_total_space),
+        forbidden_ns_without_settings(Default::forbidden_ns_without_settings),
+        forbidden_dc_sharing_among_groups(Default::forbidden_dc_sharing_among_groups),
+        reserved_space(Default::reserved_space),
+        node_backend_stat_stale_timeout(Default::node_backend_stat_stale_timeout),
+        dnet_log_mask(Default::dnet_log_mask),
+        net_thread_num(Default::net_thread_num),
+        io_thread_num(Default::io_thread_num),
+        nonblocking_io_thread_num(Default::nonblocking_io_thread_num),
+        infrastructure_dc_cache_update_period(Default::infrastructure_dc_cache_update_period),
+        infrastructure_dc_cache_valid_time(Default::infrastructure_dc_cache_valid_time),
+        inventory_worker_timeout(Default::inventory_worker_timeout)
     {
-        metadata.options.connectTimeoutMS = 5000;
+        metadata.options.connectTimeoutMS = Default::metadata_options_connectTimeoutMS;
     }
 
     uint64_t monitor_port;
@@ -89,9 +89,29 @@ struct Config
         } jobs;
     } metadata;
 
-    constexpr static const char *config_file        = "/etc/elliptics/mastermind.conf";
-    constexpr static const char *log_file           = "/var/log/mastermind/mastermind-collector.log";
-    constexpr static const char *elliptics_log_file = "/var/log/mastermind/elliptics-collector.log";
+    // Default values
+    struct Default {
+        constexpr static uint64_t monitor_port = 10025;
+        constexpr static uint64_t wait_timeout = 10;
+        constexpr static uint64_t forbidden_dht_groups = 0;
+        constexpr static uint64_t forbidden_unmatched_group_total_space = 0;
+        constexpr static uint64_t forbidden_ns_without_settings = 0;
+        constexpr static uint64_t forbidden_dc_sharing_among_groups = 0;
+        constexpr static uint64_t reserved_space = 105ULL << 30; // 105G
+        constexpr static uint64_t node_backend_stat_stale_timeout = 120;
+        constexpr static uint64_t dnet_log_mask = 3;
+        constexpr static uint64_t net_thread_num = 3;
+        constexpr static uint64_t io_thread_num = 3;
+        constexpr static uint64_t nonblocking_io_thread_num = 3;
+        constexpr static uint64_t infrastructure_dc_cache_update_period = 150;
+        constexpr static uint64_t infrastructure_dc_cache_valid_time = 604800;
+        constexpr static uint64_t inventory_worker_timeout = 5;
+        constexpr static uint64_t metadata_options_connectTimeoutMS = 5000;
+
+        constexpr static const char *config_file        = "/etc/elliptics/mastermind.conf";
+        constexpr static const char *log_file           = "/var/log/mastermind/mastermind-collector.log";
+        constexpr static const char *elliptics_log_file = "/var/log/mastermind/elliptics-collector.log";
+    };
 };
 
 inline std::ostream & operator << (std::ostream & ostr, const Config & config)

@@ -4,7 +4,7 @@
 override_dh_builddeb:
 	dh_builddeb -- -Zgzip
 
-# DEB_MAKE_CHECK_TARGET=test
+DEB_MAKE_CHECK_TARGET=test
 DEB_PYTHON_SYSTEM=pycentral
 
 DEB_BUILD_PARALLEL=yes

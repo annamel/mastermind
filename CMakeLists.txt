@@ -20,10 +20,27 @@ locate_library(MONGOCLIENT "mongo/version.h" "mongoclient")
 include_directories(${elliptics_INCLUDE_DIRS} ${CocaineNative_INCLUDE_DIRS}
     ${RAPIDJSON_INCLUDE_DIRS} ${CURL_INCLUDE_DIRS})
 
+set(COLLECTOR_LIBRARIES
+    ${elliptics_cpp_LIBRARY}
+    ${elliptics_client_LIBRARY}
+    ${CocaineNative_LIBRARIES}
+    ${Cocaine_LIBRARY}
+    ${CURL_LIBRARIES}
+    boost_system
+    boost_thread
+    msgpack
+    rt
+    dispatch
+    pthread_workqueue
+    kqueue
+    ev
+    mongoclient
+    )
+
 add_subdirectory(src/collector)
 
-# enable_testing()
-# add_subdirectory(tests/collector)
+enable_testing()
+add_subdirectory(tests/collector)
 
 install(FILES ${CMAKE_BINARY_DIR}/src/collector/mastermind-collector.tar.gz
     src/collector/mastermind-collector.manifest

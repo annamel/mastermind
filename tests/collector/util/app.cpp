@@ -16,31 +16,30 @@
    License along with Mastermind.
 */
 
-#include <Couple.h>
-#include <Group.h>
-#include <Namespace.h>
 #include <WorkerApplication.h>
 
-#include <gtest/gtest.h>
+namespace app {
 
-TEST(Namespace, Constructor)
+ioremap::elliptics::logger_base & logger()
 {
-    Namespace ns("summer");
-
-    ns.~Namespace();
-    memset(&ns, 0xAA, sizeof(ns));
-    new (&ns) Namespace("summer");
-
-    EXPECT_EQ(std::string("summer"), ns.get_name());
-    EXPECT_EQ(0, ns.get_couple_count());
-
-    Couple couple(std::vector<Group*>(), false);
-
-    ns.add_couple(&couple);
-    EXPECT_EQ(1, ns.get_couple_count());
-
-    std::vector<Couple*> couples;
-    ns.get_couples(couples);
-    ASSERT_EQ(1, couples.size());
-    EXPECT_EQ(&couple, couples[0]);
+    static ioremap::elliptics::file_logger logger("/dev/stdout", DNET_LOG_DEBUG);
+    return logger;
 }
+
+ioremap::elliptics::logger_base & elliptics_logger()
+{
+    return logger();
+}
+
+Config & test_config()
+{
+    static Config config;
+    return config;
+}
+
+const Config & config()
+{
+    return test_config();
+}
+
+} // namespace app

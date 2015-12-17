@@ -1,7 +1,0 @@
-backend_parser_test
-config_parser_test
-couple_test
-filter_parser_test
-group_test
-libcollector.a
-procfs_parser_test
