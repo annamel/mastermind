@@ -125,7 +125,7 @@ std::vector<Inventory::HostInfo> Inventory::load_hosts()
     // Update expired hosts.
     for (HostInfo & info : hosts) {
         if (now > info.timestamp &&
-                (now - info.timestamp) > app::config().infrastructure_dc_cache_valid_time)
+                uint64_t(now - info.timestamp) > app::config().infrastructure_dc_cache_valid_time)
             fetch_from_cocaine(info);
     }
 
