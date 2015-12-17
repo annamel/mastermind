@@ -28,3 +28,4 @@ set(TEST_LIBRARIES
     util)
 
 add_subdirectory(config_parser)
+add_subdirectory(filter_parser)
