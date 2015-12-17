@@ -44,7 +44,7 @@ void Distribution::add_sample(uint64_t sample)
     uint64_t min_diff = m_bins[1].value - m_bins[0].value;
     size_t idx_min = 0;
     for (size_t i = 1; i < (m_bins.size() - 1); ++i) {
-        uint64_t cur_diff = m_bins[i].value - m_bins[i + 1].value;
+        uint64_t cur_diff = m_bins[i + 1].value - m_bins[i].value;
         if (cur_diff < min_diff) {
             min_diff = cur_diff;
             idx_min = i;
