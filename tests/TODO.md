@@ -118,6 +118,8 @@ groups.
   https://github.com/yandex/mastermind/issues/31.
   11. TODO: add separate test for `account_job_in_status()` in the same way as
   for DC sharing.
+  12. *Job #1*. Group has no enabled backends, but have `PENDING`
+  `MOVE_JOB`. Result: `SERVICE_STALLED`.
 * **Namespace without settings**. This test checks whether Couple is reported
   `BROKEN` when no namespace settings found.
   1. *Correct setup*. Having couple in namespace which is set up

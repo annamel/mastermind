@@ -297,6 +297,14 @@ void Storage::update()
                 if (git == m_groups.end() || git->first != id) {
                     git = m_groups.insert(git, std::make_pair(id, Group(id)));
 
+                    // Check whether we have a job for this group.
+                    auto jit = m_jobs.find(id);
+                    if (jit != m_jobs.end()) {
+                        BH_LOG(app::logger(), DNET_LOG_INFO,
+                                "Have job %s for newly created group %d", jit->second.get_id(), id);
+                        git->second.set_active_job(jit->second);
+                    }
+
                     // result must be status=INIT, status_text="No node backends"
                     git->second.update_status();
                 }
@@ -406,6 +414,9 @@ void Storage::merge_jobs(const std::map<int, Job> & new_jobs, bool *have_newer)
     // Newly coming jobs must be added to m_jobs and bound to groups.
     // Remaining jobs must be updated.
 
+    BH_LOG(app::logger(), DNET_LOG_INFO, "Merge jobs (current count: %lu, new: %lu)",
+            m_jobs.size(), new_jobs.size());
+
     auto old = m_jobs.begin();
     auto fresh = new_jobs.begin();
 
@@ -414,16 +425,24 @@ void Storage::merge_jobs(const std::map<int, Job> & new_jobs, bool *have_newer)
             if (fresh == new_jobs.end() || old->first < fresh->first) {
                 // old job is not present in new set
 
+                BH_LOG(app::logger(), DNET_LOG_INFO, "Job %s disappeared", old->second.get_id());
+
                 // unbind old job from the group
                 auto it = m_groups.find(old->first);
-                if (it != m_groups.end())
+                if (it != m_groups.end()) {
+                    BH_LOG(app::logger(), DNET_LOG_INFO, "Unbinding job %s from group %d",
+                            old->second.get_id(), old->first);
                     it->second.clear_active_job();
+                }
 
                 // erase disappeared job
                 m_jobs.erase(old++);
                 continue;
             } else if (old->first == fresh->first) {
                 // both old and new jobs are on the same group, update old one
+
+                BH_LOG(app::logger(), DNET_LOG_INFO, "Updating job for group %d (old id: %s, new id: %s)",
+                        old->second.get_group_id(), old->second.get_id(), fresh->second.get_id());
                 old->second.merge(fresh->second, have_newer);
 
                 ++old;
@@ -434,6 +453,9 @@ void Storage::merge_jobs(const std::map<int, Job> & new_jobs, bool *have_newer)
 
         if (fresh != new_jobs.end()) {
             // new job is not present in existing set
+
+            BH_LOG(app::logger(), DNET_LOG_INFO, "New job %s (group %d)",
+                    fresh->second.get_id(), fresh->second.get_group_id());
             m_jobs.insert(*fresh);
             ++fresh;
         }
