@@ -30,3 +30,4 @@ set(TEST_LIBRARIES
 add_subdirectory(config_parser)
 add_subdirectory(filter_parser)
 add_subdirectory(stats_parser)
+add_subdirectory(group)

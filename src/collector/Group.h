@@ -32,8 +32,10 @@
 class Backend;
 class Couple;
 class Filter;
+class FS;
 class GroupHistoryEntry;
 class Namespace;
+class Node;
 class Storage;
 
 class Group
@@ -82,7 +84,6 @@ public:
 
 public:
     Group(int id);
-    Group();
 
     int get_id() const
     { return m_id; }
@@ -124,7 +125,7 @@ public:
 
     void handle_metadata_download_failed(const std::string & why);
     void save_metadata(const char *metadata, size_t size, uint64_t timestamp);
-    int parse_metadata();
+    bool parse_metadata();
     void calculate_type();
 
     bool metadata_parsed() const
