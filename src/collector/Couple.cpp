@@ -195,8 +195,8 @@ bool Couple::check_groups(const std::vector<int> & group_ids) const
     if (group_ids.size() != m_groups.size())
         return false;
 
-    for (size_t i = 0; i < group_ids.size(); ++i) {
-        if (m_groups[i].get().get_id() != group_ids[i])
+    for (const Group & group : m_groups) {
+        if (group.get_metadata().couple != group_ids)
             return false;
     }
 
