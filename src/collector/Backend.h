@@ -38,59 +38,84 @@ struct BackendStat
     uint64_t get_timestamp() const
     { return ts_sec * 1000000UL + ts_usec; }
 
+    // ./
+    uint64_t backend_id;
+
+    // timestamp/
     uint64_t ts_sec;
     uint64_t ts_usec;
-    uint64_t backend_id;
-    uint64_t state;
 
-    uint64_t vfs_blocks;
-    uint64_t vfs_bavail;
-    uint64_t vfs_bsize;
-    uint64_t vfs_error;
-
-    uint64_t records_total;
-    uint64_t records_removed;
-    uint64_t records_removed_size;
-    uint64_t base_size;
-
-    uint64_t fsid;
-    uint64_t defrag_state;
-    uint64_t want_defrag;
-
+    // backend/dstat
     uint64_t read_ios;
     uint64_t write_ios;
     uint64_t read_ticks;
     uint64_t write_ticks;
     uint64_t io_ticks;
     uint64_t read_sectors;
+    // backend/dstat/error
     uint64_t dstat_error;
 
+    // backend/vfs/
+    uint64_t fsid;
+    // backend/vfs/blocks
+    uint64_t vfs_blocks;
+    // backend/vfs/bavail
+    uint64_t vfs_bavail;
+    // backend/vfs/bsize
+    uint64_t vfs_bsize;
+    // backend/vfs/error
+    uint64_t vfs_error;
+
+    // backend/summary_stats/
+    uint64_t base_size;
+    uint64_t records_total;
+    uint64_t records_removed;
+    uint64_t records_removed_size;
+    uint64_t want_defrag;
+
+    // backend/config/
     uint64_t blob_size_limit;
-    uint64_t max_blob_base_size;
     uint64_t blob_size;
     uint64_t group;
+    std::string data_path;
+    std::string file_path;
 
+    // backend/base_stats/<filename>/blob_base_size
+    uint64_t max_blob_base_size;
+
+    // status/
+    uint64_t state;
+    uint64_t defrag_state;
     uint64_t read_only;
+    // status/last_start/
     uint64_t last_start_ts_sec;
     uint64_t last_start_ts_usec;
 
-    uint64_t stat_commit_rofs_errors;
-
+    // commands/write/cache/<command source>/size
     uint64_t ell_cache_write_size;
+    // commands/write/cache/<command source>/time
     uint64_t ell_cache_write_time;
+    // commands/write/disk/<command source>/size
     uint64_t ell_disk_write_size;
+    // commands/write/disk/<command source>/time
     uint64_t ell_disk_write_time;
+    // commands/<other>/cache/<command source>/size
     uint64_t ell_cache_read_size;
+    // commands/<other>/cache/<command source>/time
     uint64_t ell_cache_read_time;
+    // commands/<other>/disk/<command source>/size
     uint64_t ell_disk_read_size;
+    // commands/<other>/time/<command source>/size
     uint64_t ell_disk_read_time;
 
     // TODO: Use handystats counters.
+    // io/blocking/current_size
     uint64_t io_blocking_size;
+    // io/nonblocking/current_size
     uint64_t io_nonblocking_size;
 
-    std::string data_path;
-    std::string file_path;
+    // /stats/<stat name>/eblob.<id>.disk.stat_commit.errors.<EROFS>/count
+    uint64_t stat_commit_rofs_errors;
 };
 
 struct CommandStat
