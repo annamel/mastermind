@@ -206,6 +206,11 @@ groups.
   of backends. List of Group's backends must become empty.
   6. *Automatic history entries*. Make sure entries of type `automatic`
   are getting skipped.
+* **Couple check (issue #97)**. Example setup: there are groups 5, 11, 12.
+  They all have coupling info (5, 11, 12) in metadata. These groups are
+  in state `COUPLED`, and couple 5:11:12 is in state `OK`. Then we receive
+  metadata of group 10 which is (10, 11, 12). After couple check group 10
+  must become `BAD`.
 
 #### Filesystem:
 
