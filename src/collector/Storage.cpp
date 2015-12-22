@@ -264,7 +264,7 @@ void Storage::update()
         else
             group.set_active_job(jit->second);
 
-        if (group.parse_metadata() != 0)
+        if (!group.parse_metadata())
             continue;
 
         group.calculate_type();

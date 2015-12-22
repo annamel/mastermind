@@ -124,7 +124,7 @@ public:
 
     void handle_metadata_download_failed(const std::string & why);
     void save_metadata(const char *metadata, size_t size, uint64_t timestamp);
-    int parse_metadata();
+    bool parse_metadata();
     void calculate_type();
 
     bool metadata_parsed() const

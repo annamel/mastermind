@@ -181,10 +181,10 @@ void Group::save_metadata(const char *metadata, size_t size, uint64_t timestamp)
     m_clean = false;
 }
 
-int Group::parse_metadata()
+bool Group::parse_metadata()
 {
     if (m_clean)
-        return 0;
+        return true;
 
     m_clean = true;
     m_metadata_parsed = false;
@@ -209,7 +209,7 @@ int Group::parse_metadata()
     if (!ostr.str().empty()) {
         m_status_text = ostr.str();
         m_status = BAD;
-        return -1;
+        return false;
     }
 
     int version = 0;
@@ -320,7 +320,7 @@ int Group::parse_metadata()
         m_status_text = ostr.str();
         m_status = BAD;
         BH_LOG(app::logger(), DNET_LOG_ERROR, "Metadata parse error: %s", m_status_text.c_str());
-        return -1;
+        return false;
     }
 
     m_metadata.version = version;
@@ -332,7 +332,7 @@ int Group::parse_metadata()
     m_metadata.service.job_id = service_job_id;
     m_metadata_parsed = true;
 
-    return 0;
+    return true;
 }
 
 void Group::calculate_type()
