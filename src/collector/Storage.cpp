@@ -97,7 +97,7 @@ Storage::Storage()
 Storage::Storage(const Storage & other)
     :
     m_jobs_timestamp(0),
-    m_group_history_ts(0)
+    m_group_history_ts(other.m_group_history_ts)
 {
     bool have_newer;
     merge(other, have_newer);
@@ -138,16 +138,22 @@ void Storage::add_node(const Host & host, int port, int family)
 
 void Storage::handle_backend(Backend & backend)
 {
+    BH_LOG(app::logger(), DNET_LOG_DEBUG, "Storage: Handle backend %s", backend.get_key());
+
     auto it = m_groups.lower_bound(backend.get_stat().group);
 
     if (it != m_groups.end() && it->first == int(backend.get_stat().group)) {
+        BH_LOG(app::logger(), DNET_LOG_DEBUG, "Adding backend to group %lu", backend.get_stat().group);
         it->second.add_backend(backend);
     } else {
+        BH_LOG(app::logger(), DNET_LOG_DEBUG, "New group %lu", backend.get_stat().group);
         it = m_groups.insert(it, std::make_pair(backend.get_stat().group, Group(backend.get_stat().group)));
         it->second.add_backend(backend);
     }
 
     if (backend.group_changed()) {
+        BH_LOG(app::logger(), DNET_LOG_DEBUG, "Backend group changed");
+
         int old_id = backend.get_old_group_id();
         auto it_old = m_groups.find(old_id);
         if (it_old != m_groups.end()) {
@@ -209,13 +215,6 @@ void Storage::update_group_structure()
 {
     BH_LOG(app::logger(), DNET_LOG_INFO, "Updating group structure");
 
-    for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
-        Node & node = it->second;
-        std::vector<std::reference_wrapper<Backend>> backends = node.pick_new_backends();
-        for (Backend & backend : backends)
-            handle_backend(backend);
-    }
-
     for (const GroupHistoryEntry & entry : m_group_history) {
         auto it = m_groups.find(entry.get_group_id());
         if (it != m_groups.end()) {
@@ -224,6 +223,13 @@ void Storage::update_group_structure()
             BH_LOG(app::logger(), DNET_LOG_DEBUG, "History database contains record for "
                     "unknown group %d", entry.get_group_id());
         }
+    }
+
+    for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
+        Node & node = it->second;
+        std::vector<std::reference_wrapper<Backend>> backends = node.pick_new_backends();
+        for (Backend & backend : backends)
+            handle_backend(backend);
     }
 }
 

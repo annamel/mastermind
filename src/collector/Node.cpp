@@ -30,6 +30,8 @@
 
 #include <cmath>
 
+#include <blackhole/scoped_attributes.hpp>
+
 NodeStat::NodeStat()
 {
     std::memset(this, 0, sizeof(*this));
@@ -42,6 +44,8 @@ Node::Node(const Host & host, int port, int family)
     m_family(family)
 {
     m_key = key(host.get_addr().c_str(), port, family);
+    m_attr = { blackhole::attribute::make(std::string("node"), m_key) };
+
     std::memset(&m_clock, 0, sizeof(m_clock));
     m_download_data.reserve(4096);
 }
@@ -151,22 +155,38 @@ FS & Node::get_fs(uint64_t fsid)
 
 void Node::handle_backend(const BackendStat & new_stat)
 {
+    auto attr = m_attr;
+    attr.insert(blackhole::attribute::make(std::string("backend"),
+            m_key + '/' + std::to_string(new_stat.backend_id)));
+    blackhole::scoped_attributes_t guard(app::logger(), std::move(attr));
+
+    BH_LOG(app::logger(), DNET_LOG_DEBUG, "Node: Handle backend");
+
     // skip zero group ids
-    if (!new_stat.group)
+    if (!new_stat.group) {
+        BH_LOG(app::logger(), DNET_LOG_DEBUG, "Skipping backend with zero group id");
         return;
+    }
 
     // iterator will be used below as insertion hint
     auto it = m_backends.lower_bound(new_stat.backend_id);
 
     bool found = it != m_backends.end() && it->first == int(new_stat.backend_id);
-    if (!found && !new_stat.state)
+    if (!found && !new_stat.state) {
+        BH_LOG(app::logger(), DNET_LOG_DEBUG,
+                "Skipping backend in state %lu", new_stat.state);
         return;
+    }
 
     uint64_t old_fsid = 0;
     if (found) {
         old_fsid = it->second.get_stat().fsid;
+
+        BH_LOG(app::logger(), DNET_LOG_DEBUG, "Backend is found, updating filesystem %lu", old_fsid);
         it->second.update(new_stat);
     } else {
+        BH_LOG(app::logger(), DNET_LOG_DEBUG, "New backend");
+
         it = m_backends.insert(it, std::make_pair(new_stat.backend_id, Backend(*this)));
         it->second.init(new_stat);
         m_new_backends.push_back(it->second);
@@ -179,8 +199,7 @@ void Node::handle_backend(const BackendStat & new_stat)
     if (new_fsid != old_fsid) {
         if (found) {
             BH_LOG(app::logger(), DNET_LOG_INFO,
-                    "Updating backend %s: FS changed from %lu to %lu",
-                    backend.get_key().c_str(), old_fsid, new_fsid);
+                    "Updating backend: FS changed from %lu to %lu", old_fsid, new_fsid);
         }
 
         if (old_fsid)
@@ -217,6 +236,8 @@ void Node::update_filesystems()
 
 void Node::merge_backends(const Node & other_node, bool & have_newer)
 {
+    blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
+
     auto my = m_backends.begin();
     auto other = other_node.m_backends.begin();
 

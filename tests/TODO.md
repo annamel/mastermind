@@ -257,6 +257,8 @@ groups.
   then with one incorrect (lacking fields/wrong field type).
   6. *Two and three nodes*. Try 2 and 3 audit records and check whether
   the most recent record is selected.
+  7. *Old entry*. History contains old entries with empty set of backends.
+  Group has enabled backend. Old entries shouldn't affect the current state.
 
 #### Inventory:
 * **TODO**: Primarily tests should cover communication with MongoDB,
