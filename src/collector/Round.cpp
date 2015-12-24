@@ -156,8 +156,7 @@ void Round::step2_1_jobs_and_history(void *arg)
 
     // This is an approximate point of time we started collecting statistics.
     // It will be used to filter history entries.
-    uint64_t start_ts = 0;
-    clock_get_real(start_ts);
+    uint64_t start_ts = clock_get_real();
 
     try {
         const Config & config = app::config();
@@ -202,8 +201,7 @@ void Round::step2_1_jobs_and_history(void *arg)
                              mongo::ReadPreference_PrimaryPreferred, mongo::BSONArray()),
                 0, 0, &jobs_fields).release());
 
-        uint64_t ts = 0;
-        clock_get_real(ts);
+        uint64_t ts = clock_get_real();
         std::vector<Job> jobs;
         size_t count = 0;
 

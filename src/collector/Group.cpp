@@ -169,7 +169,7 @@ void Group::apply(const GroupHistoryEntry & entry)
         if (double(m_update_time) < entry.get_timestamp())
             m_update_time = entry.get_timestamp();
         else
-            clock_get_real(m_update_time);
+            m_update_time = clock_get_real();
     }
 }
 
@@ -191,7 +191,7 @@ void Group::save_metadata(const char *metadata, size_t size, uint64_t timestamp)
             !std::memcmp(&m_metadata_file[0], metadata, size))
         return;
 
-    clock_get_real(m_update_time);
+    m_update_time = clock_get_real();
     m_metadata_file.assign(metadata, metadata + size);
     m_clean = false;
 }
