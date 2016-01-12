@@ -112,10 +112,6 @@ public:
     void push_items(std::vector<std::reference_wrapper<FS>> & filesystems);
 
     void print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
-            const std::vector<std::reference_wrapper<Backend>> & backends,
-            const std::vector<std::reference_wrapper<FS>> & filesystems,
-            bool print_backends,
-            bool print_fs,
             bool show_internals) const;
 
 public:

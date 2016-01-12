@@ -256,14 +256,33 @@ void Backend::check_stalled()
 
 void Backend::update_status()
 {
-    if (m_calculated.stalled || m_stat.state != DNET_BACKEND_ENABLED || m_fs == nullptr)
+    if (m_fs == nullptr) {
+        BH_LOG(app::logger(), DNET_LOG_ERROR,
+            "Internal error: Backend %s is not bound to filesystem");
         m_calculated.status = STALLED;
-    else if (m_fs->get_status() == FS::BROKEN)
+        m_calculated.status_detail = StatusDetail::NoFS;
+        return;
+    }
+
+    if (m_calculated.stalled || m_stat.state != DNET_BACKEND_ENABLED) {
+        m_calculated.status = STALLED;
+        if (m_calculated.stalled)
+            m_calculated.status_detail = StatusDetail::Stalled;
+        else
+            m_calculated.status_detail = StatusDetail::NotEnabled;
+    } else if (m_fs->get_status() == FS::BROKEN) {
         m_calculated.status = BROKEN;
-    else if (m_stat.read_only || m_calculated.stat_commit_rofs_errors_diff)
+        m_calculated.status_detail = StatusDetail::FSBroken;
+    } else if (m_stat.read_only || m_calculated.stat_commit_rofs_errors_diff) {
         m_calculated.status = RO;
-    else
+        if (m_stat.read_only)
+            m_calculated.status_detail = StatusDetail::ReadOnly;
+        else
+            m_calculated.status_detail = StatusDetail::HasCommitErrors;
+    } else {
         m_calculated.status = OK;
+        m_calculated.status_detail = StatusDetail::OK;
+    }
 }
 
 bool Backend::group_changed() const
@@ -341,7 +360,7 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
 {
     // JSON looks like this:
     // {
-    //     "addr": "::1:1025:10/10",
+    //     "id": "::1:1025:10/10",
     //     "all_stat_commit_errors": 0,
     //     "backend_id": 10,
     //     "base_size": 2333049958,
@@ -364,13 +383,13 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //     "io_blocking_size": 0,
     //     "io_nonblocking_size": 0,
     //     "last_start": {
-    //         "ts_sec": 1444498430,
-    //         "ts_usec": 864588
+    //         "tv_sec": 1444498430,
+    //         "tv_usec": 864588
     //     },
     //     "max_blob_base_size": 2333049958,
     //     "max_read_rps": 100,
     //     "max_write_rps": 100,
-    //     "node": "::1:1025:10",
+    //     "node_id": "::1:1025:10",
     //     "read_ios": 89340,
     //     "read_only": false,
     //     "read_rps": 21,
@@ -378,10 +397,11 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //     "records_removed": 2511,
     //     "records_removed_size": 258561169,
     //     "records_total": 29630,
-    //     "stalled": 0,
+    //     "stalled": false,
     //     "stat_commit_rofs_errors_diff": 0,
     //     "state": 1,
     //     "status": "OK",
+    //     "status_text": "Node ::1:1025:10/10 is OK",
     //     "timestamp": {
     //         "tv_sec": 1445866995,
     //         "tv_usec": 468262,
@@ -414,11 +434,11 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     }
     writer.EndObject();
 
-    writer.Key("node");
+    writer.Key("node_id");
     writer.String(m_node.get_key().c_str());
     writer.Key("backend_id");
     writer.Uint64(m_stat.backend_id);
-    writer.Key("addr");
+    writer.Key("id");
     writer.String(m_key.c_str());
     writer.Key("state");
     writer.Uint64(m_stat.state);
@@ -456,6 +476,10 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     writer.Uint64(m_stat.blob_size);
     writer.Key("group");
     writer.Uint64(m_stat.group);
+    writer.Key("io_blocking_size");
+    writer.Uint64(m_stat.io_blocking_size);
+    writer.Key("io_nonblocking_size");
+    writer.Uint64(m_stat.io_nonblocking_size);
 
     writer.Key("vfs_free_space");
     writer.Uint64(m_calculated.vfs_free_space);
@@ -485,14 +509,48 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     writer.Uint64(m_calculated.max_read_rps);
     writer.Key("max_write_rps");
     writer.Uint64(m_calculated.max_write_rps);
+
     writer.Key("status");
     writer.String(status_str(m_calculated.status));
 
+    std::string status_text;
+    switch (m_calculated.status_detail) {
+    case StatusDetail::Init:
+        status_text = "No statistics gathered for node backend " + m_key;
+        break;
+    case StatusDetail::Stalled:
+        {
+            uint64_t sec = clock_get_real() / 1000000000ULL - m_stat.get_timestamp() / 1000000ULL;
+            status_text = "Statistics for node backend " + m_key + " is too old: "
+                "it was gathered " + std::to_string(sec) + " seconds ago";
+        }
+        break;
+    case StatusDetail::NotEnabled:
+        status_text = "Node backend " + m_key + " has been disabled";
+        break;
+    case StatusDetail::NoFS:
+        status_text = "INTERNAL ERROR: Node backend " + m_key + " has no filesystem";
+        break;
+    case StatusDetail::FSBroken:
+        status_text = "Node backends' space limit is not properly configured "
+            "on fs " + std::to_string(m_stat.fsid);
+        break;
+    case StatusDetail::ReadOnly:
+    case StatusDetail::HasCommitErrors:
+        status_text = "Node backend " + m_key + " is in read-only state";
+        break;
+    case StatusDetail::OK:
+        status_text = "Node " + m_key + " is OK";
+    }
+
+    writer.Key("status_text");
+    writer.String(status_text.c_str());
+
     writer.Key("last_start");
     writer.StartObject();
-    writer.Key("ts_sec");
+    writer.Key("tv_sec");
     writer.Uint64(m_stat.last_start_ts_sec);
-    writer.Key("ts_usec");
+    writer.Key("tv_usec");
     writer.Uint64(m_stat.last_start_ts_usec);
     writer.EndObject();
 
@@ -508,7 +566,7 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
         writer.Key("stat_commit_rofs_errors");
         writer.Uint64(m_stat.stat_commit_rofs_errors);
         writer.Key("stalled");
-        writer.Uint64(m_calculated.stalled);
+        writer.Bool(m_calculated.stalled);
         writer.Key("data_path");
         writer.String(m_stat.data_path.c_str());
         writer.Key("file_path");

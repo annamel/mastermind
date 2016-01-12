@@ -147,6 +147,18 @@ public:
         BROKEN    // Misconfig
     };
 
+    enum class StatusDetail
+    {
+        Init = 0,
+        Stalled,
+        NotEnabled,
+        NoFS,
+        FSBroken,
+        ReadOnly,
+        HasCommitErrors,
+        OK
+    };
+
     static const char *status_str(Status status);
 
     struct Calculated
@@ -175,6 +187,7 @@ public:
         bool stalled;
 
         Status status;
+        StatusDetail status_detail;
 
         std::string base_path;
 

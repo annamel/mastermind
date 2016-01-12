@@ -32,7 +32,8 @@ struct Filter
         Node      = 8,
         Backend   = 0x10,
         FS        = 0x20,
-        Job       = 0x40
+        Job       = 0x40,
+        Host      = 0x80
     };
 
     Filter()

@@ -47,6 +47,7 @@ FS::FS(Node & node, uint64_t fsid)
 {
     std::memset(&m_stat, 0, sizeof(m_stat));
     m_key = node.get_key() + "/" + std::to_string(fsid);
+    m_id = node.get_host().get_addr() + "/" + std::to_string(fsid);
 }
 
 FS::FS(Node & node)
@@ -65,6 +66,7 @@ void FS::clone_from(const FS & other)
 {
     m_fsid = other.m_fsid;
     m_key = other.m_key;
+    m_id = other.m_id;
     std::memcpy(&m_stat, &other.m_stat, sizeof(m_stat));
     m_calculated = other.m_calculated;
     m_status = other.m_status;
@@ -209,6 +211,7 @@ void FS::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
 {
     // JSON looks like this:
     // {
+    //     "id": "::1/158919948",
     //     "timestamp": {
     //         "tv_sec": 1445348936,
     //         "tv_usec": 615421,
@@ -220,7 +223,7 @@ void FS::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //         "ell_net_read_rate": 0.0,
     //         "ell_net_write_rate": 0.0
     //     }
-    //     "node": "::1:1025:10",
+    //     "host_id": "::1",
     //     "fsid": 158919948,
     //     "total_space": 983547510784,
     //     "status": "OK",
@@ -228,6 +231,9 @@ void FS::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     // }
 
     writer.StartObject();
+
+    writer.Key("id");
+    writer.String(m_id.c_str());
 
     writer.Key("timestamp");
     writer.StartObject();
@@ -241,8 +247,8 @@ void FS::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     }
     writer.EndObject();
 
-    writer.Key("node");
-    writer.String(m_node.get_key().c_str());
+    writer.Key("host_id");
+    writer.String(m_node.get_host().get_addr().c_str());
     writer.Key("fsid");
     writer.Uint64(m_fsid);
     writer.Key("status");

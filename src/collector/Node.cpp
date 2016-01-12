@@ -332,13 +332,38 @@ void Node::push_items(std::vector<std::reference_wrapper<FS>> & filesystems)
 }
 
 void Node::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
-        const std::vector<std::reference_wrapper<Backend>> & backends,
-        const std::vector<std::reference_wrapper<FS>> & filesystems,
-        bool print_backends,
-        bool print_fs,
         bool show_internals) const
 {
+    // JSON looks like this:
+    // {
+    //     "id": "2001:db8:0:1111::11:1025:10",
+    //     "timestamp": {
+    //         "tv_sec": 1452595933,
+    //         "tv_usec": 351301,
+    //         "user_friendly": "2016-01-12 13:52:13.351301"
+    //     },
+    //     "host_id": "2001:db8:0:1111::11",
+    //     "port": 1025,
+    //     "family": 10,
+    //     "tx_bytes": 1242232091,
+    //     "rx_bytes": 972720737,
+    //     "load_average": 0.53,
+    //     "tx_rate": 20983.809148860227,
+    //     "rx_rate": 61231.333457435481,
+    //     "commands_stat": {
+    //         ... (see example in CommandStat::print_json())
+    //     },
+    //     "la": 53,
+    //     "clock_stat": {
+    //         "stats_parse": 6081181,
+    //         "update_fs": 45233
+    //     }
+    // }
+
     writer.StartObject();
+
+    writer.Key("id");
+    writer.String(m_key.c_str());
 
     writer.Key("timestamp");
     writer.StartObject();
@@ -352,8 +377,8 @@ void Node::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     }
     writer.EndObject();
 
-    writer.Key("host");
-    m_host.print_json(writer);
+    writer.Key("host_id");
+    writer.String(m_host.get_addr().c_str());
 
     writer.Key("port");
     writer.Uint64(m_port);
@@ -385,36 +410,6 @@ void Node::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
         writer.Key("update_fs");
         writer.Uint64(m_clock.update_fs);
         writer.EndObject();
-    }
-
-    if (print_backends) {
-        writer.Key("backends");
-        writer.StartArray();
-        for (auto it = m_backends.begin(); it != m_backends.end(); ++it) {
-            struct {
-                bool operator () (const Backend & b1, const Backend & b2) const
-                { return &b1 < &b2; }
-            } comp;
-            if (backends.empty() || std::binary_search(backends.begin(),
-                        backends.end(), it->second, comp))
-                it->second.print_json(writer, show_internals);
-        }
-        writer.EndArray();
-    }
-
-    if (print_fs) {
-        writer.Key("filesystems");
-        writer.StartArray();
-        for (auto it = m_filesystems.begin(); it != m_filesystems.end(); ++it) {
-            struct {
-                bool operator () (const FS & fs1, const FS & fs2) const
-                { return &fs1 < &fs2; }
-            } comp;
-            if (filesystems.empty() || std::binary_search(filesystems.begin(),
-                        filesystems.end(), it->second, comp))
-                it->second.print_json(writer, show_internals);
-        }
-        writer.EndArray();
     }
 
     writer.EndObject();

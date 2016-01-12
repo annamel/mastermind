@@ -46,6 +46,7 @@ public:
         std::vector<std::reference_wrapper<Node>> nodes;
         std::vector<std::reference_wrapper<FS>> filesystems;
         std::vector<std::reference_wrapper<Namespace>> namespaces;
+        std::vector<std::reference_wrapper<const Host>> hosts;
 
         void sort();
     };
