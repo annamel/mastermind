@@ -256,14 +256,6 @@ void Backend::check_stalled()
 
 void Backend::update_status()
 {
-    if (m_fs == nullptr) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-            "Internal error: Backend %s is not bound to filesystem");
-        m_calculated.status = STALLED;
-        m_calculated.status_detail = StatusDetail::NoFS;
-        return;
-    }
-
     if (m_calculated.stalled || m_stat.state != DNET_BACKEND_ENABLED) {
         m_calculated.status = STALLED;
         if (m_calculated.stalled)
@@ -343,8 +335,7 @@ void Backend::push_items(std::vector<std::reference_wrapper<Group>> & groups) co
 
 void Backend::push_items(std::vector<std::reference_wrapper<FS>> & filesystems) const
 {
-    if (m_fs != nullptr)
-        filesystems.push_back(*m_fs);
+    filesystems.push_back(*m_fs);
 }
 
 void Backend::calculate_base_path(const BackendStat & stat)
@@ -378,7 +369,7 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //     "error": 0,
     //     "fragmentation": 0.08474519068511643,
     //     "free_space": 3035659162,
-    //     "fsid": 8323278684798404738,
+    //     "fs_id": "::1/8323278684798404738",
     //     "group": 83,
     //     "io_blocking_size": 0,
     //     "io_nonblocking_size": 0,
@@ -456,8 +447,8 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     writer.Uint64(m_stat.records_removed_size);
     writer.Key("base_size");
     writer.Uint64(m_stat.base_size);
-    writer.Key("fsid");
-    writer.Uint64(m_stat.fsid);
+    writer.Key("fs_id");
+    writer.String(m_fs->get_id().c_str());
     writer.Key("defrag_state");
     writer.Uint64(m_stat.defrag_state);
     writer.Key("want_defrag");
@@ -527,9 +518,6 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
         break;
     case StatusDetail::NotEnabled:
         status_text = "Node backend " + m_key + " has been disabled";
-        break;
-    case StatusDetail::NoFS:
-        status_text = "INTERNAL ERROR: Node backend " + m_key + " has no filesystem";
         break;
     case StatusDetail::FSBroken:
         status_text = "Node backends' space limit is not properly configured "

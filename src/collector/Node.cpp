@@ -168,6 +168,12 @@ void Node::handle_backend(const BackendStat & new_stat)
         return;
     }
 
+    // Skip zero fsids.
+    if (!new_stat.fsid) {
+        BH_LOG(app::logger(), DNET_LOG_ERROR, "Skipping backend with zero fsid");
+        return;
+    }
+
     // iterator will be used below as insertion hint
     auto it = m_backends.lower_bound(new_stat.backend_id);
 

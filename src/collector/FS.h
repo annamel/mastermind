@@ -91,6 +91,9 @@ public:
     const std::string & get_key() const
     { return m_key; }
 
+    const std::string & get_id() const
+    { return m_id; }
+
     const FSStat & get_stat() const
     { return m_stat; }
 
