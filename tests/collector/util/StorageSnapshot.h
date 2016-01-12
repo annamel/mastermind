@@ -122,6 +122,7 @@
 //                 "tv_sec": 1450875311,
 //                 "tv_usec": 16103
 //             },
+//             "blob_size_limit": 220237111,
 //             "fsid": 1164930671
 //         }
 //     },
@@ -256,6 +257,8 @@ public:
             uint64_t tv_sec;
             uint64_t tv_usec;
         } last_start;
+
+        uint64_t blob_size_limit;
 
         uint64_t fsid;
 

@@ -232,6 +232,8 @@ void StorageUpdater::add_backend(rapidjson::Writer<rapidjson::StringBuffer> & wr
             writer.Int(backend.group);
             writer.Key("data");
             writer.String(backend.data_path.c_str());
+            writer.Key("blob_size_limit");
+            writer.Uint64(backend.blob_size_limit);
         writer.EndObject();
 
         writer.Key("vfs");

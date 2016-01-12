@@ -102,6 +102,7 @@ StorageSnapshot::Backend::Backend()
     state(),
     read_only(),
     last_start(),
+    blob_size_limit(),
     fsid()
 {}
 
@@ -158,6 +159,9 @@ void StorageSnapshot::Backend::print_json(
 
     writer.Key("fsid");
     writer.Uint64(fsid);
+
+    writer.Key("blob_size_limit");
+    writer.Uint64(blob_size_limit);
 
     writer.EndObject();
 }
@@ -414,6 +418,8 @@ void StorageSnapshot::update(const char *json)
                     backend.last_start.tv_usec = ls["tv_usec"].GetInt64();
             }
 
+            if (b.HasMember("blob_size_limit"))
+                backend.blob_size_limit = b["blob_size_limit"].GetInt64();
             if (b.HasMember("fsid"))
                 backend.fsid = b["fsid"].GetInt64();
         }
@@ -664,6 +670,7 @@ void StorageSnapshot::create_backend(const std::string & key, int group)
 
     backend.state = 1;
 
+    backend.blob_size_limit = 916ULL << 30;
     backend.fsid = create_filesystem(node, 0);
 }
 
