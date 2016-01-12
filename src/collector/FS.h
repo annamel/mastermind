@@ -106,8 +106,11 @@ public:
     void remove_backend(Backend & backend)
     { m_backends.erase(backend); }
 
+    Backends & get_backends()
+    { return m_backends; }
+
     void update(const Backend & backend);
-    void update_status();
+    bool update_status();
     void update_command_stat();
 
     void merge(const FS & other, bool & have_newer);

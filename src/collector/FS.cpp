@@ -131,8 +131,10 @@ void FS::update(const Backend & backend)
         m_stat = FSStat();
 }
 
-void FS::update_status()
+bool FS::update_status()
 {
+    Status old_status = m_status;
+
     uint64_t total_space = 0;
     for (Backend & backend : m_backends) {
         Backend::Status status = backend.get_status();
@@ -153,6 +155,8 @@ void FS::update_status()
              << " from monitor stats";
         m_status_text = ostr.str();
     }
+
+    return (old_status != m_status);
 }
 
 void FS::update_command_stat()
