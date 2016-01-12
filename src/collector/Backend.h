@@ -152,7 +152,6 @@ public:
         Init = 0,
         Stalled,
         NotEnabled,
-        NoFS,
         FSBroken,
         ReadOnly,
         HasCommitErrors,
