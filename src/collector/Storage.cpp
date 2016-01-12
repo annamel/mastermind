@@ -874,6 +874,10 @@ void Storage::select(Filter & filter, Entries & entries)
                 filter_related_items(filesystems, entries.namespaces, first_pass);
         }
     }
+
+    for (Node & node : entries.nodes)
+        entries.hosts.push_back(node.get_host());
+    remove_duplicates(entries.hosts);
 }
 
 void Storage::print_json(uint32_t item_types, bool show_internals, std::string & str)
@@ -908,103 +912,164 @@ void Storage::print_json(Filter & filter, bool show_internals, std::string & str
 void Storage::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
         Entries & entries, uint32_t item_types, bool show_internals)
 {
+    // JSON looks like this:
+    // {
+    //     "hosts": [
+    //         {
+    //             ... (see example in Host::print_json())
+    //         }
+    //     ],
+    //     "nodes": [
+    //         {
+    //             ... (see example in Node::print_json())
+    //         }
+    //     ],
+    //     "backends": [
+    //         {
+    //             ... (see example in Backend::print_json())
+    //         }
+    //     ],
+    //     "filesystems": [
+    //         {
+    //             ... (see example in FS::print_json())
+    //         }
+    //     ],
+    //     "groups": [
+    //         {
+    //             ... (see example in Group::print_json())
+    //         }
+    //     ],
+    //     "couples": [
+    //         {
+    //             ... (see example in Couple::print_json())
+    //         }
+    //     ],
+    //     "namespaces": [
+    //         {
+    //             ... (see example in Namespace::print_json())
+    //         }
+    //     ]
+    // }
+
     entries.sort();
 
-    if (!entries.nodes.empty()) {
-        writer.Key("nodes");
-        writer.StartArray();
-        for (Node & node : entries.nodes)
-            node.print_json(writer, entries.backends, entries.filesystems,
-                    !!(item_types & Filter::Backend), !!(item_types & Filter::FS), show_internals);
-        writer.EndArray();
-    } else {
-        if (!entries.backends.empty()) {
-            writer.Key("backends");
-            writer.StartArray();
-            for (Backend & backend : entries.backends)
-                backend.print_json(writer, show_internals);
-            writer.EndArray();
-        }
-        if (!entries.filesystems.empty()) {
-            writer.Key("filesystems");
-            writer.StartArray();
-            for (FS & fs : entries.filesystems)
-                fs.print_json(writer, show_internals);
-            writer.EndArray();
-        }
-    }
+    writer.Key("hosts");
+    writer.StartArray();
+    for (const Host & host : entries.hosts)
+        host.print_json(writer);
+    writer.EndArray();
 
-    if (!entries.groups.empty()) {
-        writer.Key("groups");
-        writer.StartArray();
-        for (Group & group : entries.groups)
-            group.print_json(writer, show_internals);
-        writer.EndArray();
-    }
+    writer.Key("nodes");
+    writer.StartArray();
+    for (Node & node : entries.nodes)
+        node.print_json(writer, show_internals);
+    writer.EndArray();
 
-    if (!entries.couples.empty()) {
-        writer.Key("couples");
-        writer.StartArray();
-        for (Couple & couple : entries.couples)
-            couple.print_json(writer, show_internals);
-        writer.EndArray();
-    }
+    writer.Key("backends");
+    writer.StartArray();
+    for (Backend & backend : entries.backends)
+        backend.print_json(writer, show_internals);
+    writer.EndArray();
 
-    if (!entries.namespaces.empty()) {
-        writer.Key("namespaces");
-        writer.StartArray();
-        for (Namespace & ns : entries.namespaces)
-            ns.print_json(writer);
-        writer.EndArray();
-    }
+    writer.Key("filesystems");
+    writer.StartArray();
+    for (FS & fs : entries.filesystems)
+        fs.print_json(writer, show_internals);
+    writer.EndArray();
+
+    writer.Key("groups");
+    writer.StartArray();
+    for (Group & group : entries.groups)
+        group.print_json(writer, show_internals);
+    writer.EndArray();
+
+    writer.Key("couples");
+    writer.StartArray();
+    for (Couple & couple : entries.couples)
+        couple.print_json(writer, show_internals);
+    writer.EndArray();
+
+    writer.Key("namespaces");
+    writer.StartArray();
+    for (Namespace & ns : entries.namespaces)
+        ns.print_json(writer);
+    writer.EndArray();
 }
 
 void Storage::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
         uint32_t item_types, bool show_internals)
 {
-    if (!!(item_types & (Filter::Node | Filter::Backend | Filter::FS))) {
-        writer.Key("nodes");
-        writer.StartArray();
-        for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
-            it->second.print_json(writer,
-                    std::vector<std::reference_wrapper<Backend>>(),
-                    std::vector<std::reference_wrapper<FS>>(),
-                    !!(item_types & Filter::Backend), !!(item_types & Filter::FS), show_internals);
-        }
-        writer.EndArray();
-    }
+    // See JSON example in print_json(writer, entries, item_types, show_internals).
 
+    writer.Key("hosts");
+    writer.StartArray();
+    if (!!(item_types & Filter::Host)) {
+        for (auto it = m_hosts.begin(); it != m_hosts.end(); ++it)
+            it->second.print_json(writer);
+    }
+    writer.EndArray();
+
+    writer.Key("nodes");
+    writer.StartArray();
+    if (!!(item_types & Filter::Node)) {
+        for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it)
+            it->second.print_json(writer, show_internals);
+    }
+    writer.EndArray();
+
+    writer.Key("backends");
+    writer.StartArray();
+    if (!!(item_types & Filter::Backend)) {
+        for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
+            auto & backends = it->second.get_backends();
+            for (auto bit = backends.begin(); bit != backends.end(); ++bit)
+                bit->second.print_json(writer, show_internals);
+        }
+    }
+    writer.EndArray();
+
+    writer.Key("filesystems");
+    writer.StartArray();
+    if (!!(item_types & Filter::FS)) {
+        for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
+            auto & filesystems = it->second.get_filesystems();
+            for (auto fit = filesystems.begin(); fit != filesystems.end(); ++fit)
+                fit->second.print_json(writer, show_internals);
+        }
+    }
+    writer.EndArray();
+
+    writer.Key("groups");
+    writer.StartArray();
     if (!!(item_types & Filter::Group)) {
-        writer.Key("groups");
-        writer.StartArray();
         for (auto it = m_groups.begin(); it != m_groups.end(); ++it)
             it->second.print_json(writer, show_internals);
-        writer.EndArray();
     }
+    writer.EndArray();
 
+    writer.Key("couples");
+    writer.StartArray();
     if (!!(item_types & Filter::Couple)) {
-        writer.Key("couples");
-        writer.StartArray();
         for (auto it = m_couples.begin(); it != m_couples.end(); ++it)
             it->second.print_json(writer, show_internals);
-        writer.EndArray();
     }
+    writer.EndArray();
 
+    writer.Key("namespaces");
+    writer.StartArray();
     if (!!(item_types & Filter::Namespace)) {
-        writer.Key("namespaces");
-        writer.StartArray();
         for (auto it = m_namespaces.begin(); it != m_namespaces.end(); ++it)
             it->second.print_json(writer);
-        writer.EndArray();
     }
+    writer.EndArray();
 
+    writer.Key("jobs");
+    writer.StartArray();
     if (!!(item_types & Filter::Job)) {
-        writer.Key("jobs");
-        writer.StartArray();
         for (auto it = m_jobs.begin(); it != m_jobs.end(); ++it)
             it->second.print_json(writer);
-        writer.EndArray();
     }
+    writer.EndArray();
 }
 
 bool Storage::split_node_num(const std::string & key, std::string & node, uint64_t & id)

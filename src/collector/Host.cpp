@@ -41,13 +41,13 @@ void Host::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer) const
 {
     // JSON looks like this:
     // {
-    //     "addr": "2001:cdba::3257:9652",
+    //     "id": "2001:cdba::3257:9652",
     //     "name": "node1.elliptics.mystorage.com",
     //     "dc": "changbu"
     // }
 
     writer.StartObject();
-    writer.Key("addr");
+    writer.Key("id");
     writer.String(m_addr.c_str());
     writer.Key("name");
     writer.String(m_name.c_str());

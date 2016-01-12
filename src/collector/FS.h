@@ -127,6 +127,9 @@ private:
     uint64_t m_fsid;
     std::string m_key;
 
+    // 'id' field in JSON.
+    std::string m_id;
+
     // Set of references to backends stored on this filesystem. They shouldn't be
     // modified directly but only used to obtain related items and calculate the
     // state of the backend.

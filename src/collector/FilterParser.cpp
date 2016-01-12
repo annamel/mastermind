@@ -107,6 +107,8 @@ bool FilterParser::String(const char* str, rapidjson::SizeType length, bool copy
             m_filter.item_types |= Filter::FS;
         else if (!std::strcmp(str, "job"))
             m_filter.item_types |= Filter::Job;
+        else if (!std::strcmp(str, "host"))
+            m_filter.item_types |= Filter::Host;
         else
             return false;
         break;

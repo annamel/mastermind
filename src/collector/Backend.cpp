@@ -364,13 +364,13 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //     "io_blocking_size": 0,
     //     "io_nonblocking_size": 0,
     //     "last_start": {
-    //         "ts_sec": 1444498430,
-    //         "ts_usec": 864588
+    //         "tv_sec": 1444498430,
+    //         "tv_usec": 864588
     //     },
     //     "max_blob_base_size": 2333049958,
     //     "max_read_rps": 100,
     //     "max_write_rps": 100,
-    //     "node": "::1:1025:10",
+    //     "node_id": "::1:1025:10",
     //     "read_ios": 89340,
     //     "read_only": false,
     //     "read_rps": 21,
@@ -378,7 +378,7 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //     "records_removed": 2511,
     //     "records_removed_size": 258561169,
     //     "records_total": 29630,
-    //     "stalled": 0,
+    //     "stalled": false,
     //     "stat_commit_rofs_errors_diff": 0,
     //     "state": 1,
     //     "status": "OK",
@@ -414,11 +414,11 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     }
     writer.EndObject();
 
-    writer.Key("node");
+    writer.Key("node_id");
     writer.String(m_node.get_key().c_str());
     writer.Key("backend_id");
     writer.Uint64(m_stat.backend_id);
-    writer.Key("addr");
+    writer.Key("id");
     writer.String(m_key.c_str());
     writer.Key("state");
     writer.Uint64(m_stat.state);
@@ -456,6 +456,10 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     writer.Uint64(m_stat.blob_size);
     writer.Key("group");
     writer.Uint64(m_stat.group);
+    writer.Key("io_blocking_size");
+    writer.Uint64(m_stat.io_blocking_size);
+    writer.Key("io_nonblocking_size");
+    writer.Uint64(m_stat.io_nonblocking_size);
 
     writer.Key("vfs_free_space");
     writer.Uint64(m_calculated.vfs_free_space);
@@ -490,9 +494,9 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
 
     writer.Key("last_start");
     writer.StartObject();
-    writer.Key("ts_sec");
+    writer.Key("tv_sec");
     writer.Uint64(m_stat.last_start_ts_sec);
-    writer.Key("ts_usec");
+    writer.Key("tv_usec");
     writer.Uint64(m_stat.last_start_ts_usec);
     writer.EndObject();
 
@@ -508,7 +512,7 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
         writer.Key("stat_commit_rofs_errors");
         writer.Uint64(m_stat.stat_commit_rofs_errors);
         writer.Key("stalled");
-        writer.Uint64(m_calculated.stalled);
+        writer.Bool(m_calculated.stalled);
         writer.Key("data_path");
         writer.String(m_stat.data_path.c_str());
         writer.Key("file_path");
