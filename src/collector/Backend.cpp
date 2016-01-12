@@ -378,7 +378,7 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //     "error": 0,
     //     "fragmentation": 0.08474519068511643,
     //     "free_space": 3035659162,
-    //     "fsid": 8323278684798404738,
+    //     "fs_id": "::1/8323278684798404738",
     //     "group": 83,
     //     "io_blocking_size": 0,
     //     "io_nonblocking_size": 0,
@@ -456,8 +456,10 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     writer.Uint64(m_stat.records_removed_size);
     writer.Key("base_size");
     writer.Uint64(m_stat.base_size);
-    writer.Key("fsid");
-    writer.Uint64(m_stat.fsid);
+    if (m_fs != nullptr) {
+        writer.Key("fs_id");
+        writer.String(m_fs->get_id().c_str());
+    }
     writer.Key("defrag_state");
     writer.Uint64(m_stat.defrag_state);
     writer.Key("want_defrag");
