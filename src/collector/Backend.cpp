@@ -256,14 +256,33 @@ void Backend::check_stalled()
 
 void Backend::update_status()
 {
-    if (m_calculated.stalled || m_stat.state != DNET_BACKEND_ENABLED || m_fs == nullptr)
+    if (m_fs == nullptr) {
+        BH_LOG(app::logger(), DNET_LOG_ERROR,
+            "Internal error: Backend %s is not bound to filesystem");
         m_calculated.status = STALLED;
-    else if (m_fs->get_status() == FS::BROKEN)
+        m_calculated.status_detail = StatusDetail::NoFS;
+        return;
+    }
+
+    if (m_calculated.stalled || m_stat.state != DNET_BACKEND_ENABLED) {
+        m_calculated.status = STALLED;
+        if (m_calculated.stalled)
+            m_calculated.status_detail = StatusDetail::Stalled;
+        else
+            m_calculated.status_detail = StatusDetail::NotEnabled;
+    } else if (m_fs->get_status() == FS::BROKEN) {
         m_calculated.status = BROKEN;
-    else if (m_stat.read_only || m_calculated.stat_commit_rofs_errors_diff)
+        m_calculated.status_detail = StatusDetail::FSBroken;
+    } else if (m_stat.read_only || m_calculated.stat_commit_rofs_errors_diff) {
         m_calculated.status = RO;
-    else
+        if (m_stat.read_only)
+            m_calculated.status_detail = StatusDetail::ReadOnly;
+        else
+            m_calculated.status_detail = StatusDetail::HasCommitErrors;
+    } else {
         m_calculated.status = OK;
+        m_calculated.status_detail = StatusDetail::OK;
+    }
 }
 
 bool Backend::group_changed() const
@@ -341,7 +360,7 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
 {
     // JSON looks like this:
     // {
-    //     "addr": "::1:1025:10/10",
+    //     "id": "::1:1025:10/10",
     //     "all_stat_commit_errors": 0,
     //     "backend_id": 10,
     //     "base_size": 2333049958,
@@ -382,6 +401,7 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     //     "stat_commit_rofs_errors_diff": 0,
     //     "state": 1,
     //     "status": "OK",
+    //     "status_text": "Node ::1:1025:10/10 is OK",
     //     "timestamp": {
     //         "tv_sec": 1445866995,
     //         "tv_usec": 468262,
@@ -489,8 +509,42 @@ void Backend::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer,
     writer.Uint64(m_calculated.max_read_rps);
     writer.Key("max_write_rps");
     writer.Uint64(m_calculated.max_write_rps);
+
     writer.Key("status");
     writer.String(status_str(m_calculated.status));
+
+    std::string status_text;
+    switch (m_calculated.status_detail) {
+    case StatusDetail::Init:
+        status_text = "No statistics gathered for node backend " + m_key;
+        break;
+    case StatusDetail::Stalled:
+        {
+            uint64_t sec = clock_get_real() / 1000000000ULL - m_stat.get_timestamp() / 1000000ULL;
+            status_text = "Statistics for node backend " + m_key + " is too old: "
+                "it was gathered " + std::to_string(sec) + " seconds ago";
+        }
+        break;
+    case StatusDetail::NotEnabled:
+        status_text = "Node backend " + m_key + " has been disabled";
+        break;
+    case StatusDetail::NoFS:
+        status_text = "INTERNAL ERROR: Node backend " + m_key + " has no filesystem";
+        break;
+    case StatusDetail::FSBroken:
+        status_text = "Node backends' space limit is not properly configured "
+            "on fs " + std::to_string(m_stat.fsid);
+        break;
+    case StatusDetail::ReadOnly:
+    case StatusDetail::HasCommitErrors:
+        status_text = "Node backend " + m_key + " is in read-only state";
+        break;
+    case StatusDetail::OK:
+        status_text = "Node " + m_key + " is OK";
+    }
+
+    writer.Key("status_text");
+    writer.String(status_text.c_str());
 
     writer.Key("last_start");
     writer.StartObject();
