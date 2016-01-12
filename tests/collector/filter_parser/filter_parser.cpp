@@ -86,6 +86,7 @@ TEST(FilterParserTest, SingleItemType)
     test_item_types(vs({"backend"}), Filter::Backend);
     test_item_types(vs({"fs"}), Filter::FS);
     test_item_types(vs({"job"}), Filter::Job);
+    test_item_types(vs({"host"}), Filter::Host);
 }
 
 TEST(FilterParserTest, MultipleItemTypes)
@@ -103,8 +104,9 @@ TEST(FilterParserTest, AllItemTypes)
     // This test verifies parsing of item_types with all types specified.
 
     typedef std::vector<std::string> vs;
-    test_item_types(vs({"group", "couple", "namespace", "node", "backend", "fs", "job"}),
-            Filter::Group|Filter::Couple|Filter::Namespace|Filter::Node|Filter::Backend|Filter::FS|Filter::Job);
+    test_item_types(vs({"group", "couple", "namespace", "node", "backend", "fs", "job", "host"}),
+            Filter::Group|Filter::Couple|Filter::Namespace|Filter::Node|
+                Filter::Backend|Filter::FS|Filter::Job|Filter::Host);
 }
 
 TEST(FilterParserTest, WrongItemType)
