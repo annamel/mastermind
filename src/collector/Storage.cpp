@@ -320,7 +320,7 @@ void Storage::update()
 
         // check if groups are associated with the same existing couple
         bool have_same_couples = true;
-        for (size_t i = 1; i < groups.size(); ++i) {
+        for (size_t i = 0; i < groups.size(); ++i) {
             if (!groups[i].get().match_couple(groups[0])) {
                 have_same_couples = false;
                 break;
@@ -342,7 +342,7 @@ void Storage::update()
 
             if (ns_name.empty()) {
                 BH_LOG(app::logger(), DNET_LOG_ERROR,
-                        "All groups in couple %s have empty namespace", ns_name);
+                        "All groups in couple %s have empty namespace", key);
                 continue;
             }
 
