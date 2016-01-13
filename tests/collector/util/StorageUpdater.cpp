@@ -103,8 +103,12 @@ void StorageUpdater::update_monitor_stats()
     m_storage.save_group_history(std::move(m_snapshot.pick_group_history()),
         m_snapshot.get_history_ts());
 
+    m_storage.save_new_jobs(std::move(m_snapshot.pick_jobs()),
+        m_snapshot.get_jobs_ts());
+
     // Update group structure, etc.
     m_storage.process_node_backends();
+    m_storage.process_new_jobs();
 }
 
 void StorageUpdater::update_metadata()

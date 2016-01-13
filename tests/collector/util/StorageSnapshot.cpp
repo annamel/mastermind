@@ -293,12 +293,14 @@ void StorageSnapshot::Group::print_json(
 StorageSnapshot::StorageSnapshot()
     :
     m_default_ts(0),
-    m_history_ts(0)
+    m_history_ts(0),
+    m_jobs_ts(0)
 {}
 
 StorageSnapshot::StorageSnapshot(const char *json)
     :
-    m_history_ts(0)
+    m_history_ts(0),
+    m_jobs_ts(0)
 {
     update(json);
     complete();
@@ -566,6 +568,37 @@ void StorageSnapshot::update(const char *json)
             }
         }
     }
+
+    if (doc.HasMember("jobs")) {
+        const Value & jobs = doc["jobs"];
+
+        if (!jobs.IsObject())
+            throw std::invalid_argument("jobs is not an object");
+
+        if (jobs.HasMember("timestamp"))
+            m_jobs_ts = jobs["timestamp"].GetInt64();
+        else
+            m_jobs_ts = m_default_ts;
+
+        if (jobs.HasMember("entries")) {
+            const Value & s = jobs["entries"];
+            if (!s.IsArray())
+                throw std::invalid_argument("jobs/entries is not an array");
+
+            for (Value::ConstValueIterator it = s.Begin(); it != s.End(); ++it) {
+                const Value & j = *it;
+
+                StringBuffer buf;
+                Writer<StringBuffer> writer(buf);
+                j.Accept(writer);
+
+                mongo::BSONObj bson = mongo::fromjson(buf.GetString());
+                Job job(bson, m_jobs_ts);
+
+                m_jobs.emplace_back(std::move(job));
+            }
+        }
+    }
 }
 
 void StorageSnapshot::complete()
@@ -746,6 +779,17 @@ void StorageSnapshot::print_json(rapidjson::Writer<rapidjson::StringBuffer> & wr
             // TODO: uncomment after GroupHistoryEntry::print_json() is ready
             // for (const auto & entry : m_history)
             //    entry.print_json(writer);
+            writer.EndArray();
+        writer.EndObject();
+
+        writer.Key("jobs");
+        writer.StartObject();
+            writer.Key("timestamp");
+            writer.Uint64(m_jobs_ts);
+            writer.Key("entries");
+            writer.StartArray();
+            for (const auto & job : m_jobs)
+               job.print_json(writer);
             writer.EndArray();
         writer.EndObject();
     writer.EndObject();
