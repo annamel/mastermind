@@ -500,10 +500,10 @@ bool Group::have_metadata_conflict(const Group & other)
     if (!m_metadata.version)
         return false;
 
-    auto my = std::tie(m_metadata.frozen, m_metadata.couple,
+    auto my = std::tie(m_metadata.couple,
             m_metadata.namespace_name, m_metadata.type);
 
-    auto oth = std::tie(other.m_metadata.frozen, other.m_metadata.couple,
+    auto oth = std::tie(other.m_metadata.couple,
             other.m_metadata.namespace_name, other.m_metadata.type);
 
     return (my != oth);
