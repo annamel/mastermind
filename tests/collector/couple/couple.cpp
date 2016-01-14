@@ -78,3 +78,31 @@ TEST(Couple, Creation)
     EXPECT_EQ("1:2:3", couple.get_key());
     EXPECT_EQ(3, couple.get_groups().size());
 }
+
+TEST(Couple, SingleGroup)
+{
+    const char *json = R"END(
+    {
+        "groups": {
+            "1": {
+                "metadata": {
+                    "version": 2,
+                    "couple": [ 1 ],
+                    "namespace": "default"
+                },
+                "backends": [
+                    "2001:db8:0:1111::11:1025:10/1"
+                ]
+            }
+        }
+    }
+    )END";
+
+    Storage storage = StorageUpdater::create(json);
+
+    EXPECT_EQ(1, storage.get_couples().size());
+
+    const Couple & couple = storage.get_couples().begin()->second;
+    EXPECT_EQ("1", couple.get_key());
+    EXPECT_EQ(1, couple.get_groups().size());
+}
