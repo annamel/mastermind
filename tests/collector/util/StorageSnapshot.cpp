@@ -776,9 +776,8 @@ void StorageSnapshot::print_json(rapidjson::Writer<rapidjson::StringBuffer> & wr
             writer.Uint64(m_history_ts);
             writer.Key("entries");
             writer.StartArray();
-            // TODO: uncomment after GroupHistoryEntry::print_json() is ready
-            // for (const auto & entry : m_history)
-            //    entry.print_json(writer);
+            for (const auto & entry : m_history)
+                entry.print_json(writer);
             writer.EndArray();
         writer.EndObject();
 
