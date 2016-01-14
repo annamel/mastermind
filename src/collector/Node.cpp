@@ -44,7 +44,7 @@ Node::Node(const Host & host, int port, int family)
     m_family(family)
 {
     m_key = key(host.get_addr().c_str(), port, family);
-    m_attr = { blackhole::attribute::make(std::string("node"), m_key) };
+    m_attr = { blackhole::attribute::make(std::string("node"), std::string(m_key)) };
 
     std::memset(&m_clock, 0, sizeof(m_clock));
     m_download_data.reserve(4096);
