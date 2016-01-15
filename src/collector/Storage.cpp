@@ -689,6 +689,7 @@ void Storage::filter_related_items(
         source_item.push_items(related_items);
 
     if (first_pass || related_items.empty()) {
+        remove_duplicates(related_items);
         current_set = related_items;
         first_pass = false;
         return;
