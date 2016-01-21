@@ -102,7 +102,7 @@ bool Job::operator == (const Job & other) const
         std::tie(other.m_id, other.m_type, other.m_status, other.m_group_id);
 }
 
-void Job::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer)
+void Job::print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer) const
 {
     // JSON looks like this:
     // {

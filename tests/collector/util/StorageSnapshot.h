@@ -27,6 +27,7 @@
 #include <rapidjson/writer.h>
 
 #include <GroupHistoryEntry.h>
+#include <Job.h>
 
 // The idea is to have an ability to describe test setup using minimalistic
 // JSON document containing only key information about items.
@@ -122,6 +123,7 @@
 //                 "tv_sec": 1450875311,
 //                 "tv_usec": 16103
 //             },
+//             "blob_size_limit": 220237111,
 //             "fsid": 1164930671
 //         }
 //     },
@@ -184,6 +186,17 @@
 //                 ]
 //             }
 //         ]
+//     },
+//     "jobs": {
+//          "timestamp": 1450875247000113000,
+//          "entries": [
+//              {
+//                  "group": 23,
+//                  "id": "222fb6cc9cbe42aba4bbdfb6fcca9748",
+//                  "status": "new",
+//                  "type": "move_job"
+//              }
+//          ]
 //     }
 // }
 //
@@ -256,6 +269,8 @@ public:
             uint64_t tv_sec;
             uint64_t tv_usec;
         } last_start;
+
+        uint64_t blob_size_limit;
 
         uint64_t fsid;
 
@@ -346,11 +361,17 @@ public:
     std::vector<GroupHistoryEntry> pick_group_history()
     { return std::move(m_history); }
 
+    std::vector<Job> pick_jobs()
+    { return std::move(m_jobs); }
+
     uint64_t get_default_ts() const
     { return m_default_ts; }
 
     uint64_t get_history_ts() const
     { return m_history_ts; }
+
+    uint64_t get_jobs_ts() const
+    { return m_jobs_ts; }
 
     // Generate JSON schema. Currently this method is used for debugging
     // purposes.
@@ -381,8 +402,12 @@ private:
     std::map<int, Group> m_groups;
     // Group history
     std::vector<GroupHistoryEntry> m_history;
+    // Jobs
+    std::vector<Job> m_jobs;
     // History timestamp
     uint64_t m_history_ts;
+    // Jobs timestamp
+    uint64_t m_jobs_ts;
 };
 
 std::ostream & operator << (std::ostream & ostr, const StorageSnapshot & snapshot);

@@ -21,10 +21,11 @@
 
 #include "StorageSnapshot.h"
 
+#include <Storage.h>
+
 #include <rapidjson/document.h>
 
 class Group;
-class Storage;
 
 // StorageUpdater is used to fully construct Storage object from a layout
 // represented by StorageSnapshot. Following steps will be performed:
@@ -53,6 +54,20 @@ public:
 
     // Perform all actions above.
     void update_all();
+
+    static Storage create(const char *json)
+    {
+        StorageSnapshot snapshot;
+        snapshot.update(json);
+        snapshot.complete();
+
+        Storage storage;
+
+        StorageUpdater updater(storage, snapshot);
+        updater.update_all();
+
+        return storage;
+    }
 
 private:
     void add_node(rapidjson::Writer<rapidjson::StringBuffer> & writer,

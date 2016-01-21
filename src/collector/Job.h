@@ -73,7 +73,7 @@ public:
     bool operator != (const Job & other) const
     { return !(*this == other); }
 
-    void print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer);
+    void print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer) const;
 
 private:
     std::string m_id;

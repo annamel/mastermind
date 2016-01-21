@@ -19,10 +19,34 @@
 #ifndef __6b5a24ec_1b65_491c_9c5b_5840b729edb0
 #define __6b5a24ec_1b65_491c_9c5b_5840b729edb0
 
+#include <Config.h>
+
+// Guard which restores previous field value.
+template <typename T>
+struct ConfigGuard
+{
+    ConfigGuard(T & val)
+        : ref(val), old(val)
+    {}
+
+    ~ConfigGuard()
+    { ref = old; }
+
+    T & ref;
+    T old;
+};
+
 // set_test_clock -- set value returned by clock_get_real().
 // If values are zero, value of CLOCK_REALTIME will be retrieved.
 // See clock_gettime(2).
 void set_test_clock(uint64_t sec, uint64_t usec);
+
+namespace app {
+
+// Non-const access to the object returned by app::config().
+Config & test_config();
+
+}
 
 #endif
 

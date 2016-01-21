@@ -18,6 +18,8 @@
 
 #include <WorkerApplication.h>
 
+#include "TestUtil.h"
+
 namespace app {
 
 ioremap::elliptics::logger_base & logger()
