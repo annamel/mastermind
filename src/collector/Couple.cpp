@@ -75,8 +75,8 @@ void Couple::update_status()
 
     for (size_t i = 1; i < m_groups.size(); ++i) {
         if (m_groups[0].get().have_metadata_conflict(m_groups[i].get())) {
+            m_status = BAD;
             if (!account_job_in_status()) {
-                m_status = BAD;
                 ostr << "Groups " << m_groups[0].get().get_id() << " and "
                      << m_groups[i].get().get_id() << " have different metadata.";
                 m_status_text = ostr.str();
