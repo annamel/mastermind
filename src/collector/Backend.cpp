@@ -222,8 +222,7 @@ void Backend::recalculate()
     m_calculated.fragmentation = double(m_stat.records_removed) / double(std::max(m_stat.records_total, 1UL));
 
     if (m_stat.blob_size_limit) {
-        // vfs_total_space can be less than blob_size_limit in case of misconfiguration
-        m_calculated.total_space = std::min(m_stat.blob_size_limit, m_calculated.vfs_total_space);
+        m_calculated.total_space = m_stat.blob_size_limit;
         m_calculated.used_space = m_stat.base_size;
         m_calculated.free_space = std::min(int64_t(m_calculated.vfs_free_space),
                 std::max(0L, m_calculated.total_space - m_calculated.used_space));

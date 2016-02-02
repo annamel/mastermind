@@ -236,7 +236,12 @@ void Node::update_filesystems()
     for (auto it = m_filesystems.begin(); it != m_filesystems.end(); ++it) {
         FS & fs = it->second;
         fs.update_command_stat();
-        fs.update_status();
+        if (fs.update_status()) {
+            // Filesystem state has changed. Recalculate backend states.
+            auto & backends = fs.get_backends();
+            for (Backend & backend : backends)
+                backend.update_status();
+        }
     }
 }
 
