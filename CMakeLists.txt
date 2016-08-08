@@ -21,8 +21,8 @@ include_directories(${elliptics_INCLUDE_DIRS} ${CocaineNative_INCLUDE_DIRS}
     ${RAPIDJSON_INCLUDE_DIRS} ${CURL_INCLUDE_DIRS})
 
 set(COLLECTOR_LIBRARIES
-    ${elliptics_cpp_LIBRARY}
     ${elliptics_client_LIBRARY}
+    ${elliptics_cpp_LIBRARY}
     ${CocaineNative_LIBRARIES}
     ${Cocaine_LIBRARY}
     ${CURL_LIBRARIES}
