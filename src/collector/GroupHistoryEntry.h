@@ -20,9 +20,12 @@
 #define __9aa43a1c_afa6_4bf7_a90c_b16d0ba55bb1
 
 #include <mongo/bson/bson.h>
+#include <rapidjson/writer.h>
 
+#include <ostream>
 #include <set>
 #include <string>
+#include <tuple>
 
 // Sample history database entry:
 //
@@ -63,12 +66,15 @@
 class GroupHistoryEntry
 {
 public:
+    // Each tuple contains (hostname, port, family, backend_id)
+    typedef std::set<std::tuple<std::string, int, int, uint64_t>> Backends;
+
     GroupHistoryEntry(mongo::BSONObj & obj);
 
     int get_group_id() const
     { return m_group_id; }
 
-    const std::set<std::string> & get_backends() const
+    const Backends & get_backends() const
     { return m_backends; }
 
     double get_timestamp() const
@@ -80,17 +86,19 @@ public:
     bool empty() const
     { return m_empty; }
 
-    std::string to_string() const;
+    void print_json(rapidjson::Writer<rapidjson::StringBuffer> & writer) const;
 
 private:
     void parse_backend_history_entry(mongo::BSONObj & obj);
 
 private:
     int m_group_id;
-    std::set<std::string> m_backends;
+    Backends m_backends;
     double m_timestamp;
     bool m_empty;
 };
+
+std::ostream & operator << (std::ostream & ostr, const GroupHistoryEntry & entry);
 
 #endif
 

@@ -252,7 +252,7 @@ void Round::step2_1_jobs_and_history(void *arg)
                 GroupHistoryEntry entry(obj);
                 if (!entry.empty()) {
                     BH_LOG(app::logger(), DNET_LOG_INFO,
-                            "Loaded group history entry:\n%s", entry.to_string());
+                            "Loaded group history entry:\n%s", entry);
                     group_history.emplace_back(std::move(entry));
                 }
             } catch (const mongo::MsgAssertionException & e) {
