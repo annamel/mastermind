@@ -224,8 +224,6 @@ TEST(GroupHistory, NoChanges)
     check_group_backends(storage, vs({BACKEND1_KEY, BACKEND2_KEY}));
 }
 
-#if 0
-
 TEST(GroupHistory, PlusNewBackend)
 {
     // Apply entry with the same set of backends plus new backends. Nothing must change.
@@ -541,5 +539,3 @@ TEST(GroupHistory, DifferentSet)
 
     check_group_backends(storage, vs());
 }
-
-#endif
