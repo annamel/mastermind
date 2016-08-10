@@ -1,0 +1,97 @@
+diff --git a/src/cocaine-app/jobs/job_types.py b/src/cocaine-app/jobs/job_types.py
+index fc0fdc3..570d078 100644
+--- a/src/cocaine-app/jobs/job_types.py
++++ b/src/cocaine-app/jobs/job_types.py
+@@ -32,3 +32,4 @@ class TaskTypes(object):
+     TYPE_DNET_CLIENT_BACKEND_CMD = 'dnet_client_backend_cmd'
+     TYPE_WAIT_GROUPSET_STATE = 'wait_groupset_state'
+     TYPE_CHANGE_COUPLE_FROZEN_STATUS = 'change_couple_frozen_status'
++    TYPE_CLEANUP = 'cleanup_mds_task'
+diff --git a/src/cocaine-app/jobs/mds_cleanup.py b/src/cocaine-app/jobs/mds_cleanup.py
+index f4fb804..295d319 100644
+--- a/src/cocaine-app/jobs/mds_cleanup.py
++++ b/src/cocaine-app/jobs/mds_cleanup.py
+@@ -2,6 +2,7 @@ import tasks
+ from job import Job
+ from job_types import JobTypes
+ import logging
++from tasks import LangolierTask
+ 
+ logger = logging.getLogger('mm.jobs')
+ 
+@@ -19,6 +20,8 @@ class MdsCleanupJob(Job):
+ 
+     def create_tasks(self):
+         self.tasks = {}
++        task = LangolierTask.new(self)
++        self.tasks += task
+ 
+     @property
+     def _involved_groups(self):
+diff --git a/src/cocaine-app/jobs/tasks/__init__.py b/src/cocaine-app/jobs/tasks/__init__.py
+index 530c73c..7f3de07 100644
+--- a/src/cocaine-app/jobs/tasks/__init__.py
++++ b/src/cocaine-app/jobs/tasks/__init__.py
+@@ -14,7 +14,7 @@ from dnet_client_backend_cmd import DnetClientBackendCmdTask
+ from wait_groupset_state import WaitGroupsetStateTask
+ from write_meta_key import WriteMetaKeyTask
+ from change_couple_frozen_status import ChangeCoupleFrozenStatusTask
+-
++from langolier_cleanup import LangolierTask
+ 
+ class TaskFactory(object):
+ 
+@@ -47,4 +47,6 @@ class TaskFactory(object):
+             return WriteMetaKeyTask.from_data(data, job)
+         if task_type == TaskTypes.TYPE_CHANGE_COUPLE_FROZEN_STATUS:
+             return ChangeCoupleFrozenStatusTask.from_data(data, job)
++        if task_type == TaskTypes.TYPE_CLEANUP:
++            return LangolierTask.from_data(data, job)
+         raise ValueError('Unknown task type {0}'.format(task_type))
+diff --git a/src/cocaine-app/jobs/tasks/langolier_cleanup.py b/src/cocaine-app/jobs/tasks/langolier_cleanup.py
+index e69de29..4ced96c 100644
+--- a/src/cocaine-app/jobs/tasks/langolier_cleanup.py
++++ b/src/cocaine-app/jobs/tasks/langolier_cleanup.py
+@@ -0,0 +1,42 @@
++# =========================================================================================================
++# 2016 Copyright Anna Melekhova <ann.melekhova@gmail.com>
++# All rights reserved.
++#=========================================================================================================
++
++import logging
++from jobs import TaskTypes
++from minion_cmd import MinionCmdTask
++import storage
++
++
++logger = logging.getLogger('mm.jobs')
++
++class LangolierTask(MinionCmdTask):
++    """
++    Task on consuming records with expired TTL
++    """
++    PARAMS = MinionCmdTask.PARAMS + ('node_backend', 'group')
++
++    def __init__(self, job):
++        super(LangolierTask, self).__init__(job)
++        self.type = TaskTypes.TYPE_CLEANUP
++
++    def execute(self, processor):
++        logger.error("Run Langolier")
++
++        if self.group not in storage.groups:
++            raise JobBrokenError('Group {} is not found'.format(self.group))
++        if self.node_backend not in storage.node_backends:
++            raise JobBrokenError('Node backend {} is not found'.format(self.node_backend))
++
++        group = storage.groups[self.group]
++        backend = storage.node_backend[self.node_backend]
++
++        if group.couple is None:
++            raise JobBrokenError("Task {} doesn't correspond to couple".format(self, self.group))
++
++        if group.couple.status not in storage.GOOD_STATUSES:
++            raise RetryError(10, JobBrokenError('Task {} for group {} status {}'.format(
++                self, self.group, group.couple.status)))
++
++        super(LangolierTask, self).execute(processor)
