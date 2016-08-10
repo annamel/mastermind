@@ -69,7 +69,7 @@ class ConvertToLrcGroupsetJob(Job):
     def create_tasks(self, processor):
         """Create tasks for adding new lrc groupset to a couple
 
-            If @determine_data_size is set:
+        If @determine_data_size is set:
             - create determine data size task;
         otherwise:
             - run 'lrc convert', then 'lrc validate' to check convertion results;
