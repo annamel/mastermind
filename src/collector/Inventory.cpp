@@ -20,12 +20,62 @@
 #include "Inventory.h"
 #include "Logger.h"
 
-#include <msgpack.hpp>
-
 namespace {
+
+using namespace cocaine;
+using namespace cocaine::framework;
 
 void empty_func(void *)
 {}
+
+std::string cocaine_invoke(std::shared_ptr<service<io::app_tag>> service,
+        const std::string & handle, const std::string & request)
+{
+    std::string result;
+
+    auto on_send = [](
+            task<channel<io::app::enqueue>::sender_type>::future_move_type future,
+            channel<io::app::enqueue>::receiver_type rx) {
+        auto tx = future.get();
+        tx.send<io::protocol<io::app::enqueue::dispatch_type>::scope::choke>();
+        return rx.recv();
+    };
+
+    auto on_chunk = [&](
+            task<boost::optional<std::string>>::future_move_type future,
+            channel<io::app::enqueue>::receiver_type rx) {
+        if (auto res = future.get())
+            result = *res;
+        else
+            throw std::runtime_error{"Empty response from cocaine"};
+        return rx.recv();
+    };
+
+    auto on_choke =[](
+            task<boost::optional<std::string>>::future_move_type future) {
+        future.get();
+    };
+
+    auto on_invoke = [&](
+            task<channel<io::app::enqueue>>::future_move_type future,
+            const std::string & data) {
+        auto channel = future.get();
+        auto tx = std::move(channel.tx);
+        auto rx = std::move(channel.rx);
+        return tx.send<io::protocol<io::app::enqueue::dispatch_type>::scope::chunk>(data)
+                .then(std::bind(on_send, std::placeholders::_1, rx))
+                .then(std::bind(on_chunk, std::placeholders::_1, rx))
+                .then(on_choke);
+    };
+
+    auto future = service->invoke<io::app::enqueue>(handle)
+            .then(std::bind(on_invoke, std::placeholders::_1, request));
+
+    // Can throw.
+    future.get();
+
+    return result;
+}
 
 } // unnamed namespace
 
@@ -263,9 +313,6 @@ void Inventory::execute_get_dc_by_host(void *arg)
 
 int Inventory::fetch_from_cocaine(HostInfo & info)
 {
-    msgpack::unpacked result;
-    msgpack::object obj;
-
     try {
         // Service may be used in both common queue and update queue.
         auto service = m_service;
@@ -273,17 +320,9 @@ int Inventory::fetch_from_cocaine(HostInfo & info)
         if (!service)
             return -1;
 
-        auto g = service->enqueue("get_dc_by_host", info.host);
-        std::string data = g.next();
+        info.dc = cocaine_invoke(service, "get_dc_by_host", info.host);
 
-        msgpack::unpack(&result, data.c_str(), data.size());
-        obj = result.get();
-
-        if (obj.type != msgpack::type::RAW) {
-            throw std::runtime_error(
-                    "inventory worker returned object of unexpected type " +
-                    std::to_string(int(obj.type)));
-        }
+        LOG_DEBUG("Resolved DC '{}' for host '{}'", info.dc, info.host);
     } catch (std::exception & e) {
         LOG_ERROR("Inventory: Could not resolve DC for host {}: {}", info.host, e.what());
         return -1;
@@ -293,7 +332,6 @@ int Inventory::fetch_from_cocaine(HostInfo & info)
         return -1;
     }
 
-    info.dc.assign(obj.via.raw.ptr, obj.via.raw.size);
     return 0;
 }
 
@@ -335,19 +373,34 @@ mongo::BSONObj Inventory::HostInfo::obj() const
 
 void Inventory::cocaine_connect()
 {
+    // Service may be used in both common queue and update queue. It is safe to
+    // reset m_service when there is an instance of shared pointer on stack.
+    auto old_service = m_service;
+
     std::string service_name = app::config().app_name + "-inventory";
 
     try {
-        m_manager = cocaine::framework::service_manager_t::create(
-                cocaine::framework::service_manager_t::endpoint_t("localhost", 10053));
+        m_manager.reset(new cocaine::framework::service_manager_t{
+                {std::make_pair("localhost", 10053)}, 1});
 
         if (!m_manager)
             throw std::runtime_error("Failed to create service manager");
 
-        // Service may be used in both common queue and update queue.
-        auto service = m_service;
-        m_service = m_manager->get_service<cocaine::framework::app_service_t>(service_name);
-        m_service->set_timeout(app::config().inventory_worker_timeout);
+        auto service = m_manager->create<cocaine::io::app_tag>(service_name);
+        auto g = service.connect();
+        g.wait_for(std::chrono::seconds{app::config().inventory_worker_timeout});
+
+        if (g.ready()) {
+            // Throws in case of connection error.
+            g.get();
+
+            LOG_INFO("Connected to inventory");
+            m_service.reset(new cocaine::framework::service<cocaine::io::app_tag>{
+                    std::move(service)});
+        } else {
+            LOG_ERROR("Cannot get inventory service in {} seconds",
+                    app::config().inventory_worker_timeout);
+        }
 
         return;
     } catch (std::exception & e) {

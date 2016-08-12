@@ -22,7 +22,7 @@
 #include "Collector.h"
 #include "Config.h"
 
-#include <cocaine/framework/dispatch.hpp>
+#include <cocaine/framework/worker.hpp>
 
 #include <memory>
 
@@ -30,12 +30,20 @@ class WorkerApplication
 {
 public:
     WorkerApplication();
-    WorkerApplication(cocaine::framework::dispatch_t & d);
     ~WorkerApplication();
 
     void init();
     void start();
     void stop();
+
+    void force_update(cocaine::framework::worker::sender tx,
+            cocaine::framework::worker::receiver rx);
+    void get_snapshot(cocaine::framework::worker::sender tx,
+            cocaine::framework::worker::receiver rx);
+    void refresh(cocaine::framework::worker::sender tx,
+            cocaine::framework::worker::receiver rx);
+    void summary(cocaine::framework::worker::sender tx,
+            cocaine::framework::worker::receiver rx);
 
     Collector & get_collector()
     { return m_collector; }

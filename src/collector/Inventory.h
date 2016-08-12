@@ -22,7 +22,9 @@
 #include <memory>
 #include <string>
 
-#include <cocaine/framework/services/app.hpp>
+#include <cocaine/framework/manager.hpp>
+#include <cocaine/framework/service.hpp>
+#include <cocaine/idl/node.hpp>
 #include <dispatch/dispatch.h>
 #include <mongo/client/dbclient.h>
 
@@ -101,7 +103,7 @@ private:
     std::map<std::string, HostInfo> m_host_info;
 
     std::shared_ptr<cocaine::framework::service_manager_t> m_manager;
-    std::shared_ptr<cocaine::framework::app_service_t> m_service;
+    std::shared_ptr<cocaine::framework::service<cocaine::io::app_tag>> m_service;
 
     std::unique_ptr<mongo::DBClientReplicaSet> m_conn;
     std::string m_collection_name;

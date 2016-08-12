@@ -16,7 +16,6 @@
    License along with Mastermind.
 */
 
-#include "CocaineHandlers.h"
 #include "WorkerApplication.h"
 #include "ConfigParser.h"
 #include "FilterParser.h"
@@ -66,18 +65,6 @@ WorkerApplication::WorkerApplication()
     m_initialized(false)
 {}
 
-WorkerApplication::WorkerApplication(cocaine::framework::dispatch_t & d)
-{
-    init();
-
-    d.on<on_summary>("summary", *this);
-    d.on<on_force_update>("force_update", *this);
-    d.on<on_get_snapshot>("get_snapshot", *this);
-    d.on<on_refresh>("refresh", *this);
-
-    start();
-}
-
 WorkerApplication::~WorkerApplication()
 {
     stop();
@@ -118,6 +105,86 @@ void WorkerApplication::start()
     app::logging::DefaultAttributes holder;
 
     m_collector.start();
+}
+
+void WorkerApplication::force_update(cocaine::framework::worker::sender tx,
+        cocaine::framework::worker::receiver rx)
+{
+    app::logging::DefaultAttributes holder;
+
+    LOG_INFO("Request to force update");
+
+    m_collector.force_update(std::move(tx));
+}
+
+void WorkerApplication::get_snapshot(cocaine::framework::worker::sender tx,
+            cocaine::framework::worker::receiver rx)
+{
+    app::logging::DefaultAttributes holder;
+
+    std::string request = [&]() {
+        auto opt = rx.recv().get();
+        if (opt)
+            return *opt;
+        return std::string{};
+    }();
+
+    LOG_INFO("Snapshot requested: '{}'", request);
+
+    Filter filter;
+    if (!request.empty()) {
+        FilterParser parser(filter);
+
+        rapidjson::Reader reader;
+        rapidjson::StringStream ss(request.c_str());
+        reader.Parse(ss, parser);
+
+        if (!parser.good()) {
+            tx.error(-1, "Incorrect filter syntax");
+            return;
+        }
+    }
+
+    m_collector.get_snapshot(std::move(tx), std::move(filter));
+}
+
+void WorkerApplication::refresh(cocaine::framework::worker::sender tx,
+        cocaine::framework::worker::receiver rx)
+{
+    app::logging::DefaultAttributes holder;
+
+    std::string request = [&]() {
+        auto opt = rx.recv().get();
+        if (opt)
+            return *opt;
+        return std::string{};
+    }();
+
+    LOG_INFO("Refresh requested: '{}'", request);
+
+    Filter filter;
+    if (!request.empty()) {
+        FilterParser parser(filter);
+
+        rapidjson::Reader reader;
+        rapidjson::StringStream ss(request.c_str());
+        reader.Parse(ss, parser);
+
+        if (!parser.good()) {
+            tx.error(-1, "Incorrect filter syntax");
+            return;
+        }
+    }
+
+    m_collector.refresh(std::move(tx), std::move(filter));
+}
+
+void WorkerApplication::summary(cocaine::framework::worker::sender tx,
+        cocaine::framework::worker::receiver rx)
+{
+    app::logging::DefaultAttributes holder;
+
+    m_collector.summary(std::move(tx));
 }
 
 namespace app

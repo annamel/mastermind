@@ -23,6 +23,7 @@
 #include "Filter.h"
 #include "Storage.h"
 
+#include <cocaine/framework/worker.hpp>
 #include <curl/curl.h>
 #include <dispatch/dispatch.h>
 #include <elliptics/session.hpp>
@@ -46,8 +47,8 @@ public:
     };
 
     Round(Collector & collector);
-    Round(Collector & collector, std::shared_ptr<on_force_update> handler);
-    Round(Collector & collector, std::shared_ptr<on_refresh> handler);
+    Round(Collector & collector, cocaine::framework::worker::sender tx);
+    Round(Collector & collector, cocaine::framework::worker::sender tx, Filter filter);
     ~Round();
 
     Collector & get_collector()
@@ -68,11 +69,8 @@ public:
     Type get_type() const
     { return m_type; }
 
-    std::shared_ptr<on_force_update> get_on_force_handler()
-    { return m_on_force_handler; }
-
-    std::shared_ptr<on_refresh> get_on_refresh_handler()
-    { return m_on_refresh_handler; }
+    cocaine::framework::worker::sender & get_cocaine_sender()
+    { return *m_cocaine_sender; }
 
     void swap_storage(std::unique_ptr<Storage> & storage)
     { m_storage.swap(storage); }
@@ -136,8 +134,8 @@ private:
     ioremap::elliptics::session m_session;
 
     Type m_type;
-    std::shared_ptr<on_force_update> m_on_force_handler;
-    std::shared_ptr<on_refresh> m_on_refresh_handler;
+    std::unique_ptr<cocaine::framework::worker::sender> m_cocaine_sender;
+    std::unique_ptr<Filter> m_filter;
 
     Storage::Entries m_entries;
 

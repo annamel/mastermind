@@ -10,11 +10,12 @@
 find_path(Cocaine_INCLUDE_DIR cocaine/context.hpp)
 
 find_library(Cocaine_LIBRARY cocaine-core)
+find_library(Cocaine_UTIL cocaine-io-util)
 
 set(Cocaine_INCLUDE_DIRS "${Cocaine_INCLUDE_DIR}")
-set(Cocaine_LIBRARIES "${Cocaine_LIBRARY}")
+set(Cocaine_LIBRARIES "${Cocaine_LIBRARY}" "${Cocaine_UTIL}")
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(Cocaine DEFAULT_MSG Cocaine_LIBRARY Cocaine_INCLUDE_DIR)
+find_package_handle_standard_args(Cocaine DEFAULT_MSG Cocaine_LIBRARIES Cocaine_INCLUDE_DIR)
 
-mark_as_advanced(Cocaine_LIBRARY Cocaine_INCLUDE_DIR)
+mark_as_advanced(Cocaine_LIBRARIES Cocaine_INCLUDE_DIR)

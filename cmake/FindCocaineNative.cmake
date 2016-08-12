@@ -7,9 +7,9 @@
 #  CocaineNative_INCLUDE_DIRS - it's include paths
 #  CocaineNative_CFLAGS - flags to compile with
 
-find_path(CocaineNative_INCLUDE_DIR cocaine/framework/dispatch.hpp)
+find_path(CocaineNative_INCLUDE_DIR cocaine/framework/worker/dispatch.hpp)
 
-find_library(CocaineNative_LIBRARY cocaine-framework)
+find_library(CocaineNative_LIBRARY cocaine-framework-native)
 
 set(CocaineNative_INCLUDE_DIRS "${CocaineNative_INCLUDE_DIR}")
 set(CocaineNative_LIBRARIES "${CocaineNative_LIBRARY}")

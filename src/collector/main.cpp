@@ -18,9 +18,52 @@
 
 #include "WorkerApplication.h"
 
-#include <cocaine/framework/dispatch.hpp>
+#include <cocaine/framework/worker.hpp>
+
+#include <syslog.h>
+
+using namespace cocaine;
+using namespace cocaine::framework;
 
 int main(int argc, char **argv)
 {
-    return cocaine::framework::run<WorkerApplication>(argc, argv);
+    // Include PID in syslog messages and print to stderr as well.
+    // See SYSLOG(3) for details on openlog() and syslog().
+    openlog(nullptr, LOG_PID|LOG_PERROR, LOG_USER);
+
+    WorkerApplication app;
+
+    try {
+        app.init();
+    } catch (const std::exception & e) {
+        syslog(LOG_ERR, "%s", e.what());
+        return 1;
+    }
+
+    worker_t worker{options_t{argc, argv}};
+
+    worker.on("summary", [&](worker::sender tx, worker::receiver rx) {
+        app.summary(std::move(tx), std::move(rx));
+    });
+
+    worker.on("force_update", [&](worker::sender tx, worker::receiver rx) {
+        app.force_update(std::move(tx), std::move(rx));
+    });
+
+    worker.on("get_snapshot", [&](worker::sender tx, worker::receiver rx) {
+        app.get_snapshot(std::move(tx), std::move(rx));
+    });
+
+    worker.on("refresh", [&](worker::sender tx, worker::receiver rx) {
+        app.refresh(std::move(tx), std::move(rx));
+    });
+
+    try {
+        app.start();
+    } catch (const std::exception & e) {
+        syslog(LOG_ERR, "%s", e.what());
+        return 1;
+    }
+
+    return worker.run();
 }

@@ -16,7 +16,7 @@
    License along with Mastermind.
 */
 
-#include "CocaineHandlers.h"
+#include "Collector.h"
 #include "FS.h"
 #include "GroupHistoryEntry.h"
 #include "Metrics.h"
@@ -93,36 +93,22 @@ Round::Round(Collector & collector)
     m_queue = dispatch_queue_create("round", DISPATCH_QUEUE_CONCURRENT);
 }
 
-Round::Round(Collector & collector, std::shared_ptr<on_force_update> handler)
+Round::Round(Collector & collector, cocaine::framework::worker::sender tx)
     :
-    m_collector(collector),
-    m_old_storage_version(collector.get_storage_version()),
-    m_session(collector.get_discovery().get_session().clone()),
-    m_type(FORCED_FULL),
-    m_epollfd(-1),
-    m_curl_handle(nullptr),
-    m_timeout_ms(0)
+    Round(collector)
 {
-    clock_start(m_clock.total);
-    m_storage.reset(new Storage(collector.get_storage()));
-    m_queue = dispatch_queue_create("round", DISPATCH_QUEUE_CONCURRENT);
-    m_on_force_handler = handler;
+    m_cocaine_sender.reset(new cocaine::framework::worker::sender{std::move(tx)});
+    m_type = FORCED_FULL;
 }
 
-Round::Round(Collector & collector, std::shared_ptr<on_refresh> handler)
+
+Round::Round(Collector & collector, cocaine::framework::worker::sender tx, Filter filter)
     :
-    m_collector(collector),
-    m_old_storage_version(collector.get_storage_version()),
-    m_session(collector.get_discovery().get_session().clone()),
-    m_type(FORCED_PARTIAL),
-    m_epollfd(-1),
-    m_curl_handle(nullptr),
-    m_timeout_ms(0)
+    Round(collector)
 {
-    clock_start(m_clock.total);
-    m_storage.reset(new Storage(collector.get_storage()));
-    m_queue = dispatch_queue_create("round", DISPATCH_QUEUE_CONCURRENT);
-    m_on_refresh_handler = handler;
+    m_cocaine_sender.reset(new cocaine::framework::worker::sender{std::move(tx)});
+    m_filter.reset(new Filter{std::move(filter)});
+    m_type = FORCED_PARTIAL;
 }
 
 Round::~Round()
@@ -281,7 +267,7 @@ void Round::step2_2_curl_download(void *arg)
     app::logging::DefaultAttributes holder;
 
     if (self.m_type == FORCED_PARTIAL)
-        self.m_storage->select(self.m_on_refresh_handler->get_filter(), self.m_entries);
+        self.m_storage->select(*self.m_filter, self.m_entries);
 
     self.perform_download();
 
