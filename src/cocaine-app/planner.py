@@ -1680,14 +1680,10 @@ class Planner(object):
         """
         Langolier job. Remove all records with expired TTL
         """
-        if not request.get('iter_group'):
-            raise ValueError('Request should contain "iter_group" field')
-
         job = self.job_processor._create_job(
                     job_type=jobs.JobTypes.TYPE_CLEANUP,
-                    params={})
+                    params=request)
 
-        logger.error("Cleanup job")
         return job.dump()
 
 def _recovery_applicable_couple(couple):

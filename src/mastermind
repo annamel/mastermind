@@ -1853,14 +1853,31 @@ def lrc_groupset_convert(groupset=('g',
 langolierDispatcher = Dispatcher(globaloptions=(host_param, app_param))
 @langolierDispatcher.command(name='run')
 @log_action
-def mds_cleanup(host=None, app=None):
+def mds_cleanup(iter_group, 
+                groups,
+                remotes,
+                batch_size=('b', 100, 'The batch size (a number of records to be removed simultaneously)'),
+                attemps=('a', 3, 'The retry count'),
+                nproc=('n', 100, 'A number of threads in session'),
+                wait_timeout=('w', 20, 'Timeout for elliptics operations'),
+                host=None, app=None):
     '''
     Run langolier. Remove records with TTL expired
     '''
     s = service(host, app)
 
+    iter_group = int(iter_group)
+    groups = map(int, groups.split(','))
+
     params = {
-        'iter_group':'101'
+        'iter_group': iter_group,
+        'groups': groups,
+        'remotes': remotes,
+        'batch_size': batch_size,
+        'attemps': attemps,
+        'nproc': nproc,
+        'wait_timeout': wait_timeout,
+        'safe': False  # always True for 'view' sub-command
         }
 
     res = s.enqueue('cleanup', msgpack.packb(params)).get()
