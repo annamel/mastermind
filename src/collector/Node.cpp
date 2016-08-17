@@ -16,7 +16,7 @@
    License along with Mastermind.
 */
 
-#include <elliptics/logger.hpp>
+#include <blackhole/scope/holder.hpp>
 #include <rapidjson/reader.h>
 
 #include "Storage.h"
@@ -24,13 +24,12 @@
 #include "Filter.h"
 #include "FS.h"
 #include "Host.h"
+#include "Logger.h"
 #include "Metrics.h"
 #include "Node.h"
 #include "WorkerApplication.h"
 
 #include <cmath>
-
-#include <blackhole/scoped_attributes.hpp>
 
 NodeStat::NodeStat()
 {
@@ -44,7 +43,7 @@ Node::Node(const Host & host, int port, int family)
     m_family(family)
 {
     m_key = key(host.get_addr().c_str(), port, family);
-    m_attr = { blackhole::attribute::make(std::string("node"), std::string(m_key)) };
+    m_attr.push_back({"node", m_key});
 
     std::memset(&m_clock, 0, sizeof(m_clock));
     m_download_data.reserve(4096);
@@ -95,8 +94,7 @@ void Node::parse_stats(void *arg)
     self.m_download_data.clear();
 
     if (!parser.good()) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Error parsing stats for node %s", self.m_key.c_str());
+        LOG_ERROR("Error parsing stats for node {}", self.m_key);
         return;
     }
 
@@ -156,21 +154,21 @@ FS & Node::get_fs(uint64_t fsid)
 void Node::handle_backend(const BackendStat & new_stat)
 {
     auto attr = m_attr;
-    attr.insert(blackhole::attribute::make(std::string("backend"),
-            m_key + '/' + std::to_string(new_stat.backend_id)));
-    blackhole::scoped_attributes_t guard(app::logger(), std::move(attr));
+    m_attr.push_back({"backend", m_key + '/' + std::to_string(new_stat.backend_id)});
 
-    BH_LOG(app::logger(), DNET_LOG_DEBUG, "Node: Handle backend");
+    blackhole::scope::holder_t holder{app::logging::logger(), attr};
+
+    LOG_DEBUG("Node: Handle backend");
 
     // skip zero group ids
     if (!new_stat.group) {
-        BH_LOG(app::logger(), DNET_LOG_DEBUG, "Skipping backend with zero group id");
+        LOG_DEBUG("Skipping backend with zero group id");
         return;
     }
 
     // Skip zero fsids.
     if (!new_stat.fsid) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR, "Skipping backend with zero fsid");
+        LOG_ERROR("Skipping backend with zero fsid");
         return;
     }
 
@@ -179,8 +177,7 @@ void Node::handle_backend(const BackendStat & new_stat)
 
     bool found = it != m_backends.end() && it->first == int(new_stat.backend_id);
     if (!found && !new_stat.state) {
-        BH_LOG(app::logger(), DNET_LOG_DEBUG,
-                "Skipping backend in state %lu", new_stat.state);
+        LOG_DEBUG("Skipping backend in state zero");
         return;
     }
 
@@ -188,10 +185,10 @@ void Node::handle_backend(const BackendStat & new_stat)
     if (found) {
         old_fsid = it->second.get_stat().fsid;
 
-        BH_LOG(app::logger(), DNET_LOG_DEBUG, "Backend is found, updating filesystem %lu", old_fsid);
+        LOG_DEBUG("Backend is found, updating filesystem {}", old_fsid);
         it->second.update(new_stat);
     } else {
-        BH_LOG(app::logger(), DNET_LOG_DEBUG, "New backend");
+        LOG_DEBUG("New backend");
 
         it = m_backends.insert(it, std::make_pair(new_stat.backend_id, Backend(*this)));
         it->second.init(new_stat);
@@ -204,8 +201,7 @@ void Node::handle_backend(const BackendStat & new_stat)
     FS & new_fs = get_fs(new_fsid);
     if (new_fsid != old_fsid) {
         if (found) {
-            BH_LOG(app::logger(), DNET_LOG_INFO,
-                    "Updating backend: FS changed from %lu to %lu", old_fsid, new_fsid);
+            LOG_INFO("Updating backend: FS changed from {} to {}", old_fsid, new_fsid);
         }
 
         if (old_fsid)
@@ -247,7 +243,7 @@ void Node::update_filesystems()
 
 void Node::merge_backends(const Node & other_node, bool & have_newer)
 {
-    blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
+    blackhole::scope::holder_t holder{app::logging::logger(), m_attr};
 
     auto my = m_backends.begin();
     auto other = other_node.m_backends.begin();
@@ -264,9 +260,8 @@ void Node::merge_backends(const Node & other_node, bool & have_newer)
                 uint64_t new_fsid = other_backend.get_stat().fsid;
 
                 if (old_fsid != new_fsid) {
-                    BH_LOG(app::logger(), DNET_LOG_INFO,
-                            "Merging backend %s: FS changed from %lu to %lu",
-                            my_backend.get_key().c_str(), old_fsid, new_fsid);
+                    LOG_INFO("Merging backend {}: FS changed from {} to {}",
+                            my_backend.get_key(), old_fsid, new_fsid);
 
                     if (old_fsid)
                         get_fs(old_fsid).remove_backend(my_backend);

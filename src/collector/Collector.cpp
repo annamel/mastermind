@@ -18,6 +18,7 @@
 
 #include "CocaineHandlers.h"
 #include "FS.h"
+#include "Logger.h"
 #include "Metrics.h"
 #include "Node.h"
 #include "WorkerApplication.h"
@@ -58,7 +59,7 @@ int Collector::init()
 
 void Collector::start()
 {
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Collector: Dispatching step 0");
+    LOG_INFO("Collector: Dispatching step 0");
     dispatch_async_f(m_queue, this, &Collector::step0_start_inventory);
 }
 
@@ -77,20 +78,24 @@ void Collector::stop()
 
 void Collector::step0_start_inventory(void *arg)
 {
+    app::logging::DefaultAttributes holder;
+
     Collector & self = *static_cast<Collector*>(arg);
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Collector: Starting inventory (initial download)");
+    LOG_INFO("Collector: Starting inventory (initial download)");
     self.m_inventory.download_initial();
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Collector: Dispatching step 1");
+    LOG_INFO("Collector: Dispatching step 1");
     dispatch_async_f(self.m_queue, &self, &Collector::step1_start_round);
 }
 
 void Collector::step1_start_round(void *arg)
 {
+    app::logging::DefaultAttributes holder;
+
     Collector & self = *static_cast<Collector*>(arg);
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Collector round: step 1");
+    LOG_INFO("Collector round: step 1");
 
     Round *round = new Round(self);
     self.m_discovery.resolve_nodes(*round);
@@ -99,11 +104,13 @@ void Collector::step1_start_round(void *arg)
 
 void Collector::step1_start_forced(void *arg)
 {
+    app::logging::DefaultAttributes holder;
+
     std::unique_ptr<std::shared_ptr<on_force_update>> handler_ptr(
             static_cast<std::shared_ptr<on_force_update>*>(arg));
     Collector & self = (*handler_ptr)->get_app().get_collector();
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Collector user-requested full round: step 1");
+    LOG_INFO("Collector user-requested full round: step 1");
 
     Round *round = new Round(self, *handler_ptr);
     self.m_discovery.resolve_nodes(*round);
@@ -112,11 +119,13 @@ void Collector::step1_start_forced(void *arg)
 
 void Collector::step1_start_refresh(void *arg)
 {
+    app::logging::DefaultAttributes holder;
+
     std::unique_ptr<std::shared_ptr<on_refresh>> handler_ptr(
             static_cast<std::shared_ptr<on_refresh>*>(arg));
     Collector & self = (*handler_ptr)->get_app().get_collector();
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Collector user-requested refresh round: step 1");
+    LOG_INFO("Collector user-requested refresh round: step 1");
 
     Round *round = new Round(self, *handler_ptr);
     round->start();
@@ -124,16 +133,17 @@ void Collector::step1_start_refresh(void *arg)
 
 void Collector::step5_compare_and_swap(void *arg)
 {
+    app::logging::DefaultAttributes holder;
+
     std::unique_ptr<Round> round(static_cast<Round*>(arg));
     Collector & self = round->get_collector();
 
     if (self.m_storage_version == round->get_old_storage_version()) {
-        BH_LOG(app::logger(), DNET_LOG_INFO, "Swapping storage");
+        LOG_INFO("Swapping storage");
         round->swap_storage(self.m_storage);
         ++self.m_storage_version;
     } else {
-        BH_LOG(app::logger(), DNET_LOG_INFO,
-                "Collector's storage has newer version %lu (Round's one has %lu)",
+        LOG_INFO("Collector's storage has newer version {} (Round's one has {})",
                 self.m_storage_version, round->get_old_storage_version());
         dispatch_async_f(self.m_queue, round.release(), &Collector::step6_merge_and_try_again);
         return;
@@ -167,6 +177,8 @@ void Collector::step5_compare_and_swap(void *arg)
 
 void Collector::step6_merge_and_try_again(void *arg)
 {
+    app::logging::DefaultAttributes holder;
+
     Round *round = static_cast<Round*>(arg);
     Collector & self = round->get_collector();
 
@@ -174,8 +186,7 @@ void Collector::step6_merge_and_try_again(void *arg)
     round->update_storage(*self.m_storage, self.m_storage_version, have_newer);
 
     if (!have_newer) {
-        BH_LOG(app::logger(), DNET_LOG_INFO,
-                "Existing storage is up-to-date, not performing swap");
+        LOG_INFO("Existing storage is up-to-date, not performing swap");
         Round::Type type = round->get_type();
         if (type == Round::REGULAR) {
             self.schedule_next_round();
@@ -193,13 +204,13 @@ void Collector::step6_merge_and_try_again(void *arg)
         }
     }
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Storage updated, scheduling a new CAS");
+    LOG_INFO("Storage updated, scheduling a new CAS");
     dispatch_barrier_async_f(self.m_queue, round, &Collector::step5_compare_and_swap);
 }
 
 void Collector::schedule_next_round()
 {
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Scheduling next round");
+    LOG_INFO("Scheduling next round");
 
     dispatch_after_f(dispatch_time(DISPATCH_TIME_NOW, 60000000000L),
             m_queue, this, &Collector::step1_start_round);
@@ -227,6 +238,8 @@ void Collector::refresh(std::shared_ptr<on_refresh> handler)
 
 void Collector::execute_get_snapshot(void *arg)
 {
+    app::logging::DefaultAttributes holder;
+
     std::unique_ptr<std::shared_ptr<on_get_snapshot>> handler_ptr(
             static_cast<std::shared_ptr<on_get_snapshot>*>(arg));
     Collector & self = (*handler_ptr)->get_app().get_collector();
@@ -245,6 +258,8 @@ void Collector::execute_get_snapshot(void *arg)
 
 void Collector::execute_summary(void *arg)
 {
+    app::logging::DefaultAttributes holder;
+
     std::unique_ptr<std::shared_ptr<on_summary>> handler_ptr(
             static_cast<std::shared_ptr<on_summary>*>(arg));
     Collector & self = (*handler_ptr)->get_app().get_collector();

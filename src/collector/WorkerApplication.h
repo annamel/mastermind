@@ -23,7 +23,6 @@
 #include "Config.h"
 
 #include <cocaine/framework/dispatch.hpp>
-#include <elliptics/logger.hpp>
 
 #include <memory>
 
@@ -49,9 +48,6 @@ private:
 
 namespace app
 {
-
-ioremap::elliptics::logger_base & logger();
-ioremap::elliptics::logger_base & elliptics_logger();
 
 const Config & config();
 

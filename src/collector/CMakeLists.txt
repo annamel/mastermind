@@ -14,6 +14,7 @@ set(COLLECTOR_SOURCES_COMMON
     Host.cpp
     Inventory.cpp
     Job.cpp
+    Logger.cpp
     Metrics.cpp
     Namespace.cpp
     Node.cpp
