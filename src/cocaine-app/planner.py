@@ -1676,19 +1676,15 @@ class Planner(object):
 
         return job.dump()
 
-def cleanup(self, request):
-    """
-    Langolier job. Remove all records with expired TTL
-    """
-    if not request.get('iter_group'):
-        raise ValueError('Request should contain "iter_group" field')
+    def cleanup(self, request):
+        """
+        Langolier job. Remove all records with expired TTL
+        """
+        job = self.job_processor._create_job(
+                    job_type=jobs.JobTypes.TYPE_CLEANUP,
+                    params=request)
 
-    job = self.job_processor._create_job(
-                job_type=jobs.JobTypes.TYPE_CLEANUP,
-                params={})
-
-    logger.error("Cleanup job")
-    return job.dump()
+        return job.dump()
 
 def _recovery_applicable_couple(couple):
     if couple.status not in storage.GOOD_STATUSES:
