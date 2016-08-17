@@ -37,6 +37,7 @@ enum severity {
     error
 };
 
+// This must be called from the main thread on start.
 void init_logger(const std::string & app_log_file,
         const std::string &elliptics_log_file, int severity_min);
 

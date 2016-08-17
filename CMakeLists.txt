@@ -7,6 +7,7 @@ find_package(Boost REQUIRED system program_options)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
+find_package(Threads)
 find_package(elliptics REQUIRED)
 find_package(CocaineNative REQUIRED)
 find_package(Cocaine REQUIRED)
@@ -22,6 +23,7 @@ include_directories(${elliptics_INCLUDE_DIRS} ${CocaineNative_INCLUDE_DIRS}
     ${RAPIDJSON_INCLUDE_DIRS} ${CURL_INCLUDE_DIRS})
 
 set(COLLECTOR_LIBRARIES
+    ${CMAKE_THREAD_LIBS_INIT}
     ${elliptics_client_LIBRARY}
     ${elliptics_cpp_LIBRARY}
     ${CocaineNative_LIBRARIES}
