@@ -17,7 +17,8 @@ class MdsCleanupJob(Job):
         'attemps',
         'nproc',
         'wait_timeout',
-        'safe'
+        'safe',
+        'resources'
     )
 
     def __init__(self, **kwargs):
