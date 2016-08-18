@@ -26,7 +26,7 @@ class JobFactory(object):
             return AddLrcGroupsetJob
         elif job_type == JobTypes.TYPE_CONVERT_TO_LRC_GROUPSET_JOB:
             return ConvertToLrcGroupsetJob
-        elif job_type == JobTypes.TYPE_CLEANUP:
+        elif job_type == JobTypes.TYPE_TTL_CLEANUP:
             return MdsCleanupJob
         raise ValueError('Unknown job type: {}'.format(job_type))
 

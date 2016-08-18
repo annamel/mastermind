@@ -1850,8 +1850,8 @@ def lrc_groupset_convert(groupset=('g',
     return
 
 # langolier commands
-langolierDispatcher = Dispatcher(globaloptions=(host_param, app_param))
-@langolierDispatcher.command(name='run')
+cleanupDispatcher = Dispatcher(globaloptions=(host_param, app_param))
+@cleanupDispatcher.command(name='run')
 @log_action
 def mds_cleanup(iter_group, 
                 groups,
@@ -1893,7 +1893,7 @@ d.nest('job', jobDispatcher, 'Perform jobs action')
 d.nest('lock', lockDispatcher, 'Acquire locks on storage infrastructure nodes')
 d.nest('unlock', unlockDispatcher, 'Release locks on storage infrastructure nodes')
 d.nest('lrc', lrcDispatcher, 'Perform actions with LRC groups or couples')
-d.nest('cleanup', langolierDispatcher, 'Cleanup action')
+d.nest('cleanup', cleanupDispatcher, 'Remove elliptics legacy records')
 
 def command_helper(argv):
     cmdtable = d.cmdtable
