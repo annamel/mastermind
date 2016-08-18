@@ -106,6 +106,12 @@ class Infrastructure(object):
         '--data-flow-rate {data_flow_rate} --wait-timeout {wait_timeout}'
     )
 
+    CLEANUP_CMD = (
+            'langolier -g {groups} -G {iter_group} '
+            '-l {log} -L {log_level} -t {temp_dir} -T {trace_id} '
+            '-w {wait_timeout} -a {attemps} -b {batch_size} -n {nproc} '
+            )
+
     def __init__(self):
 
         # actual init happens in 'init' method
@@ -590,6 +596,43 @@ class Infrastructure(object):
                 dst_path=dst_path,
                 file_tpl=file_tpl)
         return cmd
+
+    def cleanup_cmd(self,
+                    remotes,
+                    groups,
+                    iter_group,
+                    safe=True,
+                    attemps=5,
+                    wait_timeout=20,
+                    batch_size=100,
+                    nproc=10,
+                    trace_id=100):
+
+        # XXX: params (including batch, attemps, nproc, log_level, file, tmp)
+        # must be extracted from config
+        # e.g. config.get('infrastructure',{}).get('lrc_convert', {})
+
+        cmd = self.CLEANUP_CMD.format(
+            remotes=remotes,
+            groups=groups,
+            iter_group=iter_group,
+            attemps=attemps,
+            wait_timeout=wait_timeout,
+            nproc=nproc,
+            batch_size=batch_size,
+            trace_id=trace_id,
+            log="temp.log",  # XXX: fixme
+            log_level="debug",  # XXX: fixme
+            temp_dir="/tmp/")
+
+        for rt in remotes:
+            cmd += ' -r {}'.format(rt)
+
+        if safe:
+            cmd += ' -S'
+
+        return cmd
+
 
     @h.concurrent_handler
     def start_node_cmd(self, request):
