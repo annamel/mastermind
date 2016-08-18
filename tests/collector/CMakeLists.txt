@@ -27,12 +27,14 @@ set(TEST_LIBRARIES
     collector_common
     util)
 
-add_subdirectory(config_parser)
-add_subdirectory(filter_parser)
-add_subdirectory(stats_parser)
-add_subdirectory(group)
-add_subdirectory(couple)
-add_subdirectory(backend)
-add_subdirectory(filesystem)
-add_subdirectory(history)
-add_subdirectory(select)
+# Find all files test_<name>.cpp and add target <name>
+file(GLOB_RECURSE TEST_SOURCE_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "test_*.cpp")
+
+foreach(TEST_SOURCE_FILE IN LISTS TEST_SOURCE_FILES)
+    string(REGEX REPLACE ".*test_(.*)[.]cpp$" "\\1" TEST_EXECUTABLE ${TEST_SOURCE_FILE})
+    add_executable(${TEST_EXECUTABLE} EXCLUDE_FROM_ALL
+        ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_SOURCE_FILE})
+    target_link_libraries(${TEST_EXECUTABLE} ${TEST_LIBRARIES})
+    add_test(${TEST_EXECUTABLE} ${TEST_EXECUTABLE})
+    add_dependencies(run_tests ${TEST_EXECUTABLE})
+endforeach()
