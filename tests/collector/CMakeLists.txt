@@ -4,13 +4,13 @@ include_directories(${Threads_INCLUDE_DIR})
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/googletest/googletest EXCLUDE_FROM_ALL)
 
 include_directories(${GTEST_INCLUDE_DIRS})
-set(GTEST_TARGETS gtest gtest_main)
+set(GTEST_TARGETS gtest)
 
-set(GTEST_BOTH_LIBRARIES gtest gtest_main)
+set(GTEST_LIBRARIES gtest)
 
 # Show test printouts
 set(CMAKE_CTEST_COMMAND ctest --output-on-failure)
-add_custom_target(run_tests ${CMAKE_CTEST_COMMAND})
+add_custom_target(run_tests ALL)
 
 include_directories(
     ${gtest_SOURCE_DIR}/include
@@ -19,11 +19,12 @@ include_directories(
     ${mastermind_SOURCE_DIR}/src/collector
     util)
 
+add_subdirectory(test_main)
 add_subdirectory(util)
 
 set(TEST_LIBRARIES
     ${CMAKE_THREAD_LIBS_INIT}
-    ${GTEST_BOTH_LIBRARIES}
+    ${GTEST_LIBRARIES}
     collector_common
     util)
 
@@ -33,7 +34,8 @@ file(GLOB_RECURSE TEST_SOURCE_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "test_*
 foreach(TEST_SOURCE_FILE IN LISTS TEST_SOURCE_FILES)
     string(REGEX REPLACE ".*test_(.*)[.]cpp$" "\\1" TEST_EXECUTABLE ${TEST_SOURCE_FILE})
     add_executable(${TEST_EXECUTABLE} EXCLUDE_FROM_ALL
-        ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_SOURCE_FILE})
+        ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_SOURCE_FILE}
+        $<TARGET_OBJECTS:test_main>)
     target_link_libraries(${TEST_EXECUTABLE} ${TEST_LIBRARIES})
     add_test(${TEST_EXECUTABLE} ${TEST_EXECUTABLE})
     add_dependencies(run_tests ${TEST_EXECUTABLE})

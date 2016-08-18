@@ -20,6 +20,7 @@
 #include "FS.h"
 #include "GroupHistoryEntry.h"
 #include "Metrics.h"
+#include "Logger.h"
 #include "Round.h"
 #include "WorkerApplication.h"
 
@@ -139,8 +140,7 @@ void Round::update_storage(Storage & storage, uint64_t version, bool & have_newe
 
 void Round::start()
 {
-    BH_LOG(app::logger(), DNET_LOG_INFO,
-            "Starting %s discovery with %lu nodes",
+    LOG_INFO("Starting {} discovery with {} nodes",
             (m_type == REGULAR) ? "regular" : (m_type == FORCED_FULL) ? "forced full" : "forced partial",
             (m_type == FORCED_PARTIAL ? m_entries.nodes.size() : m_storage->get_nodes().size()));
 
@@ -152,6 +152,8 @@ void Round::step2_1_jobs_and_history(void *arg)
 {
     Round & self = *static_cast<Round*>(arg);
 
+    app::logging::DefaultAttributes holder;
+
     Stopwatch watch(self.m_clock.mongo);
 
     // This is an approximate point of time we started collecting statistics.
@@ -162,24 +164,21 @@ void Round::step2_1_jobs_and_history(void *arg)
         const Config & config = app::config();
 
         if (config.metadata.url.empty() || config.metadata.jobs.db.empty()) {
-            BH_LOG(app::logger(), DNET_LOG_WARNING,
-                    "Not connecting to jobs database because it was not configured");
+            LOG_WARNING("Not connecting to jobs database because it was not configured");
             return;
         }
 
         std::string errmsg;
         mongo::ConnectionString cs = mongo::ConnectionString::parse(config.metadata.url, errmsg);
         if (!cs.isValid()) {
-            BH_LOG(app::logger(), DNET_LOG_ERROR,
-                    "Mongo client ConnectionString error: %s", errmsg.c_str());
+            LOG_ERROR("Mongo client ConnectionString error: {}", errmsg);
             return;
         }
 
         std::unique_ptr<mongo::DBClientReplicaSet> conn((mongo::DBClientReplicaSet *) cs.connect(
                 errmsg, double(config.metadata.options.connectTimeoutMS) / 1000.0));
         if (conn == nullptr) {
-            BH_LOG(app::logger(), DNET_LOG_ERROR,
-                    "Connection failed: %s", errmsg.c_str());
+            LOG_ERROR("Connection failed: {}", errmsg);
             return;
         }
 
@@ -211,22 +210,18 @@ void Round::step2_1_jobs_and_history(void *arg)
                 Job job(obj, ts);
                 jobs.emplace_back(std::move(job));
             } catch (const mongo::MsgAssertionException & e) {
-                BH_LOG(app::logger(), DNET_LOG_ERROR,
-                        "Failed to parse database record: %s\nBSON object: %s",
+                LOG_ERROR("Failed to parse database record: {}\nBSON object: {}",
                         e.what(), obj.jsonString(mongo::Strict, 1));
             } catch (const std::exception & e) {
-                BH_LOG(app::logger(), DNET_LOG_ERROR,
-                        "Failed to initialize job: %s\nBSON object: %s",
+                LOG_ERROR("Failed to initialize job: {}\nBSON object: {}",
                         e.what(), obj.jsonString(mongo::Strict, 1));
             } catch (...) {
-                BH_LOG(app::logger(), DNET_LOG_ERROR,
-                        "Initializing job: Unknown exception thrown");
+                LOG_ERROR("Initializing job: Unknown exception thrown");
             }
             ++count;
         }
 
-        BH_LOG(app::logger(), DNET_LOG_INFO,
-                "Successfully processed %lu of %lu active jobs", jobs.size(), count);
+        LOG_INFO("Successfully processed {} of {} active jobs", jobs.size(), count);
 
         self.m_storage->save_new_jobs(std::move(jobs), ts);
 
@@ -251,44 +246,39 @@ void Round::step2_1_jobs_and_history(void *arg)
             try {
                 GroupHistoryEntry entry(obj);
                 if (!entry.empty()) {
-                    BH_LOG(app::logger(), DNET_LOG_INFO,
-                            "Loaded group history entry:\n%s", entry);
+                    LOG_INFO("Loaded group history entry:\n{}", entry);
                     group_history.emplace_back(std::move(entry));
                 }
             } catch (const mongo::MsgAssertionException & e) {
-                BH_LOG(app::logger(), DNET_LOG_ERROR,
-                        "Failed to parse history database record: %s\nBSON object: %s",
+                LOG_ERROR("Failed to parse history database record: {}\nBSON object: {}",
                         e.what(), obj.jsonString(mongo::Strict, 1));
             } catch (const std::exception & e) {
-                BH_LOG(app::logger(), DNET_LOG_ERROR,
-                        "Failed to initialize history entry: %s\nBSON object: %s",
+                LOG_ERROR("Failed to initialize history entry: {}\nBSON object: {}",
                         e.what(), obj.jsonString(mongo::Strict, 1));
             } catch (...) {
-                BH_LOG(app::logger(), DNET_LOG_ERROR,
-                        "Initializing history entry: Unknown exception thrown\nBSON object: %s",
+                LOG_ERROR("Initializing history entry: Unknown exception thrown\nBSON object: {}",
                         obj.jsonString(mongo::Strict, 1));
             }
         }
 
-        BH_LOG(app::logger(), DNET_LOG_INFO, "Loaded %lu group history entries", group_history.size());
+        LOG_INFO("Loaded {} group history entries", group_history.size());
 
         self.m_storage->save_group_history(std::move(group_history), start_ts);
 
     } catch (const mongo::DBException & e) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "MongoDB thrown exception: %s", e.what());
+        LOG_ERROR("MongoDB thrown exception: {}", e.what());
     } catch (const std::exception & e) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Exception thrown while connecting to jobs database: %s", e.what());
+        LOG_ERROR("Exception thrown while connecting to jobs database: {}", e.what());
     } catch (...) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Unknown exception thrown while connecting to jobs database");
+        LOG_ERROR("Unknown exception thrown while connecting to jobs database");
     }
 }
 
 void Round::step2_2_curl_download(void *arg)
 {
     Round & self = *static_cast<Round*>(arg);
+
+    app::logging::DefaultAttributes holder;
 
     if (self.m_type == FORCED_PARTIAL)
         self.m_storage->select(self.m_on_refresh_handler->get_filter(), self.m_entries);
@@ -305,6 +295,8 @@ void Round::step3_prepare_metadata_download(void *arg)
 
     clock_stop(self.m_clock.finish_monitor_stats_and_jobs);
 
+    app::logging::DefaultAttributes holder;
+
     self.m_storage->process_node_backends();
     self.m_storage->process_new_jobs();
 
@@ -313,13 +305,11 @@ void Round::step3_prepare_metadata_download(void *arg)
             : self.m_entries.groups.size());
 
     if (!self.m_nr_groups) {
-        BH_LOG(app::logger(), DNET_LOG_INFO,
-                "No groups to download metadata");
+        LOG_INFO("No groups to download metadata");
         step4_perform_update(arg);
     }
 
-    BH_LOG(app::logger(), DNET_LOG_INFO,
-            "Scheduling metadata download for %lu groups", self.m_nr_groups);
+    LOG_INFO("Scheduling metadata download for {} groups", self.m_nr_groups);
 
     clock_start(self.m_clock.metadata_download);
 
@@ -351,6 +341,8 @@ void Round::step4_perform_update(void *arg)
 {
     Round & self = *static_cast<Round*>(arg);
 
+    app::logging::DefaultAttributes holder;
+
     self.m_groups_to_read.clear();
     self.m_group_read_sessions.clear();
 
@@ -365,6 +357,8 @@ void Round::request_group_metadata(void *arg, size_t idx)
 {
     Round & self = *static_cast<Round*>(arg);
 
+    app::logging::DefaultAttributes holder;
+
     std::vector<int> group_id(1, self.m_groups_to_read[idx].get().get_id());
     static const elliptics::key key("symmetric_groups");
 
@@ -372,8 +366,7 @@ void Round::request_group_metadata(void *arg, size_t idx)
     session.set_namespace("metabalancer");
     session.set_groups(group_id);
 
-    BH_LOG(app::logger(), DNET_LOG_DEBUG,
-            "Scheduling metadata download for group %d", group_id[0]);
+    LOG_DEBUG("Scheduling metadata download for group {}", group_id[0]);
 
     elliptics::async_read_result res = session.read_data(key, group_id, 0, 0);
     res.connect(std::bind(&Round::result, &self, idx, std::placeholders::_1),
@@ -390,7 +383,7 @@ int Round::perform_download()
 
     m_curl_handle = curl_multi_init();
     if (!m_curl_handle) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR, "curl_multi_init() failed");
+        LOG_ERROR("curl_multi_init() failed");
         return -1;
     }
 
@@ -402,7 +395,7 @@ int Round::perform_download()
     m_epollfd = epoll_create(1);
     if (m_epollfd < 0) {
         int err = errno;
-        BH_LOG(app::logger(), DNET_LOG_ERROR, "epoll_create() failed: %s", strerror(err));
+        LOG_ERROR("epoll_create() failed: {}", strerror(err));
         return -1;
     }
 
@@ -429,7 +422,7 @@ int Round::perform_download()
                 continue;
 
             int err = errno;
-            BH_LOG(app::logger(), DNET_LOG_ERROR, "epoll_wait() failed: %s", strerror(err));
+            LOG_ERROR("epoll_wait() failed: {}", strerror(err));
             return -1;
         }
 
@@ -449,17 +442,16 @@ int Round::perform_download()
                 Node *node = nullptr;
                 CURLcode cc = curl_easy_getinfo(easy, CURLINFO_PRIVATE, &node);
                 if (cc != CURLE_OK) {
-                    BH_LOG(app::logger(), DNET_LOG_ERROR, "curl_easy_getinfo() failed");
+                    LOG_ERROR("curl_easy_getinfo() failed");
                     return -1;
                 }
 
                 if (msg->data.result == CURLE_OK) {
-                    BH_LOG(app::logger(), DNET_LOG_INFO,
-                            "Node %s stat download completed", node->get_key().c_str());
+                    LOG_INFO("Node {} stat download completed", node->get_key());
                     dispatch_async_f(m_queue, node, &Node::parse_stats);
                 } else {
-                    BH_LOG(app::logger(), DNET_LOG_ERROR, "Node %s stats download failed, "
-                            "result: %d", node->get_key().c_str(), msg->data.result);
+                    LOG_ERROR("Node {} stats download failed, "
+                              "result: {}", node->get_key(), msg->data.result);
                     node->drop_download_data();
                 }
 
@@ -475,13 +467,11 @@ int Round::perform_download()
 
 int Round::add_download(Node & node)
 {
-    BH_LOG(app::logger(), DNET_LOG_INFO,
-            "Scheduling stat download for node %s", node.get_key().c_str());
+    LOG_INFO("Scheduling stat download for node {}", node.get_key());
 
     CURL *easy = create_easy_handle(&node);
     if (easy == nullptr) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Cannot create easy handle to download node stat");
+        LOG_ERROR("Cannot create easy handle to download node stat");
         return -1;
     }
     curl_multi_add_handle(m_curl_handle, easy);
@@ -526,7 +516,7 @@ int Round::handle_socket(CURL *easy, curl_socket_t fd,
         int rc = epoll_ctl(self->m_epollfd, EPOLL_CTL_DEL, fd, &event);
         if (rc != 0 && errno != EBADF) {
             int err = errno;
-            BH_LOG(app::logger(), DNET_LOG_WARNING, "CURL_POLL_REMOVE: %s", strerror(err));
+            LOG_WARNING("CURL_POLL_REMOVE: {}", strerror(err));
         }
         return 0;
     }
@@ -543,7 +533,7 @@ int Round::handle_socket(CURL *easy, curl_socket_t fd,
             rc = epoll_ctl(self->m_epollfd, EPOLL_CTL_MOD, fd, &event);
         if (rc < 0) {
             int err = errno;
-            BH_LOG(app::logger(), DNET_LOG_WARNING, "EPOLL_CTL_MOD: %s", strerror(err));
+            LOG_WARNING("EPOLL_CTL_MOD: {}", strerror(err));
             return -1;
         }
     }
@@ -574,6 +564,8 @@ size_t Round::write_func(char *ptr, size_t size, size_t nmemb, void *userdata)
 
 void Round::result(size_t group_idx, const elliptics::read_result_entry & entry)
 {
+    app::logging::DefaultAttributes holder;
+
     const struct dnet_time & ts = entry.io_attribute()->timestamp;
     uint64_t timestamp_ns = ts.tsec * 1000000000ULL + ts.tnsec;
 
@@ -583,14 +575,16 @@ void Round::result(size_t group_idx, const elliptics::read_result_entry & entry)
 
 void Round::final(size_t group_idx, const elliptics::error_info & error)
 {
+    app::logging::DefaultAttributes holder;
+
     if (error)
         m_groups_to_read[group_idx].get().handle_metadata_download_failed(error.message());
     else
-        BH_LOG(app::logger(), DNET_LOG_DEBUG, "Successfully downloaded metadata for group %d",
+        LOG_DEBUG("Successfully downloaded metadata for group {}",
                 m_groups_to_read[group_idx].get().get_id());
 
     if (! --m_nr_groups) {
-        BH_LOG(app::logger(), DNET_LOG_INFO, "Group metadata download completed");
+        LOG_INFO("Group metadata download completed");
         clock_stop(m_clock.metadata_download);
 
         dispatch_async_f(m_queue, this, &Round::step4_perform_update);

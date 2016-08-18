@@ -22,17 +22,6 @@
 
 namespace app {
 
-ioremap::elliptics::logger_base & logger()
-{
-    static ioremap::elliptics::file_logger logger("/dev/stdout", DNET_LOG_DEBUG);
-    return logger;
-}
-
-ioremap::elliptics::logger_base & elliptics_logger()
-{
-    return logger();
-}
-
 Config & test_config()
 {
     static Config config;

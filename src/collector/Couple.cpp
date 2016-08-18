@@ -24,6 +24,7 @@
 #include "FS.h"
 #include "Group.h"
 #include "Host.h"
+#include "Logger.h"
 #include "Namespace.h"
 #include "Node.h"
 
@@ -297,7 +298,7 @@ int Couple::check_dc_sharing()
                 m_status = BAD;
                 m_status_text = ostr.str();
 
-                BH_LOG(app::logger(), DNET_LOG_ERROR, "%s", ostr.str());
+                LOG_ERROR("{}", ostr.str());
                 return -1;
             }
             dcs.push_back(dc);

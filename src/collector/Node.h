@@ -21,7 +21,7 @@
 
 #include "Backend.h"
 
-#include <blackhole/attribute.hpp>
+#include <blackhole/attributes.hpp>
 #include <functional>
 #include <map>
 #include <rapidjson/writer.h>
@@ -136,7 +136,7 @@ private:
     int m_family;
     std::string m_key;
 
-    blackhole::log::attributes_t m_attr;
+    blackhole::attributes_t m_attr;
 
     // backend and procfs statistics downloaded using HTTP
     std::string m_download_data;

@@ -17,12 +17,13 @@
 */
 
 #include "CocaineHandlers.h"
-#include "ConfigParser.h"
 #include "WorkerApplication.h"
+#include "ConfigParser.h"
+#include "FilterParser.h"
+#include "Logger.h"
 
 #include "Storage.h"
 
-#include <elliptics/logger.hpp>
 #include <rapidjson/reader.h>
 #include <rapidjson/filereadstream.h>
 
@@ -30,9 +31,6 @@
 #include <stdexcept>
 
 namespace {
-
-std::unique_ptr<ioremap::elliptics::logger_base> s_logger;
-std::unique_ptr<ioremap::elliptics::logger_base> s_elliptics_logger;
 
 Config s_config;
 
@@ -89,13 +87,14 @@ void WorkerApplication::init()
 {
     load_config();
 
-    s_logger.reset(new ioremap::elliptics::file_logger(
-            Config::Default::log_file, ioremap::elliptics::log_level(s_config.dnet_log_mask)));
+    app::logging::init_logger(
+            Config::Default::log_file,
+            Config::Default::elliptics_log_file,
+            s_config.dnet_log_mask);
 
-    s_elliptics_logger.reset(new ioremap::elliptics::file_logger(
-            Config::Default::elliptics_log_file, ioremap::elliptics::log_level(s_config.dnet_log_mask)));
+    app::logging::DefaultAttributes holder;
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Loaded config from %s:\n%s", Config::Default::config_file, s_config);
+    LOG_INFO("Loaded config from {}", Config::Default::config_file);
 
     if (m_collector.init())
         throw std::runtime_error("failed to initialize collector");
@@ -107,6 +106,8 @@ void WorkerApplication::stop()
 {
     // invoke stop() exactly one time
     if (m_initialized) {
+        app::logging::DefaultAttributes holder;
+
         m_collector.stop();
         m_initialized = false;
     }
@@ -114,21 +115,13 @@ void WorkerApplication::stop()
 
 void WorkerApplication::start()
 {
+    app::logging::DefaultAttributes holder;
+
     m_collector.start();
 }
 
 namespace app
 {
-
-ioremap::elliptics::logger_base & logger()
-{
-    return *s_logger;
-}
-
-ioremap::elliptics::logger_base & elliptics_logger()
-{
-    return *s_elliptics_logger;
-}
 
 const Config & config()
 {

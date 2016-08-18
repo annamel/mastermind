@@ -25,11 +25,11 @@
 #include "FS.h"
 #include "Group.h"
 #include "GroupHistoryEntry.h"
+#include "Logger.h"
 #include "Metrics.h"
 #include "Node.h"
 #include "Storage.h"
 
-#include <blackhole/scoped_attributes.hpp>
 #include <msgpack.hpp>
 
 #include <algorithm>
@@ -71,6 +71,7 @@ void Group::Metadata::clear()
 Group::Group(int id)
     :
     m_id(id),
+    m_attr{{"group", id}},
     m_clean(true),
     m_update_time(0),
     m_metadata(),
@@ -80,9 +81,7 @@ Group::Group(int id)
     m_active_job(nullptr),
     m_type(DATA),
     m_status(INIT)
-{
-    m_attr = { blackhole::attribute::make(std::string("group"), m_id) };
-}
+{}
 
 bool Group::full(double reserved_space) const
 {
@@ -133,25 +132,24 @@ const Job & Group::get_active_job() const
 
 void Group::add_backend(Backend & backend)
 {
-    blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
-    BH_LOG(app::logger(), DNET_LOG_DEBUG, "Add backend %s", backend.get_key());
+    blackhole::scope::holder_t holder{app::logging::logger(), m_attr};
+    LOG_DEBUG("Add backend {}", backend.get_key());
 
     m_backends.insert(backend);
 }
 
 void Group::remove_backend(Backend & backend)
 {
-    blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
-    BH_LOG(app::logger(), DNET_LOG_DEBUG, "Remove backend %s", backend.get_key());
+    blackhole::scope::holder_t holder{app::logging::logger(), m_attr};
+    LOG_DEBUG("Remove backend {}", backend.get_key());
 
     m_backends.erase(backend);
 }
 
 void Group::update_backends(const std::vector<std::string> & backends, uint64_t timestamp)
 {
-    blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
-    BH_LOG(app::logger(), DNET_LOG_DEBUG,
-            "Applying history entry with timestamp %lu", timestamp);
+    blackhole::scope::holder_t holder{app::logging::logger(), m_attr};
+    LOG_DEBUG("Applying history entry with timestamp {}", timestamp);
 
     bool changed = false;
     for (Backends::iterator it = m_backends.begin(); it != m_backends.end();) {
@@ -173,8 +171,8 @@ void Group::update_backends(const std::vector<std::string> & backends, uint64_t 
 
 void Group::handle_metadata_download_failed(const std::string & why)
 {
-    blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
-    BH_LOG(app::logger(), DNET_LOG_ERROR, "Metadata download failed: %s", why.c_str());
+    blackhole::scope::holder_t holder{app::logging::logger(), m_attr};
+    LOG_ERROR("Metadata download failed: {}", why);
 
     m_metadata.clear();
     m_clean = true;
@@ -333,8 +331,8 @@ bool Group::parse_metadata()
         m_status_text = ostr.str();
         m_status = BAD;
 
-        blackhole::scoped_attributes_t guard(app::logger(), blackhole::log::attributes_t(m_attr));
-        BH_LOG(app::logger(), DNET_LOG_ERROR, "Metadata parse error: %s", m_status_text.c_str());
+        blackhole::scope::holder_t holder{app::logging::logger(), m_attr};
+        LOG_ERROR("Metadata parse error: {}", m_status_text);
         return false;
     }
 

@@ -18,6 +18,7 @@
 
 #include "WorkerApplication.h"
 #include "Inventory.h"
+#include "Logger.h"
 
 #include <msgpack.hpp>
 
@@ -82,14 +83,14 @@ Inventory::~Inventory()
 
 void Inventory::init()
 {
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Inventory: Connecting to cocaine");
+    LOG_INFO("Inventory: Connecting to cocaine");
     cocaine_connect();
 }
 
 void Inventory::download_initial()
 {
     if (cache_db_connect() == 0) {
-        BH_LOG(app::logger(), DNET_LOG_INFO, "Performing initial download");
+        LOG_INFO("Performing initial download");
         time_t download_start = ::time(nullptr);
         std::vector<HostInfo> hosts = load_hosts();
         for (HostInfo & info : hosts) {
@@ -107,7 +108,7 @@ void Inventory::download_initial()
 
 void Inventory::dispatch_next_reload()
 {
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Inventory: Dispatching next reload");
+    LOG_INFO("Inventory: Dispatching next reload");
 
     // Config option 'infrastructure_dc_cache_update_period' is specified in seconds.
     // dispatch_time() accepts nanoseconds.
@@ -138,7 +139,7 @@ void Inventory::execute_save_update(void *arg)
 
     std::unique_ptr<SaveUpdateData> data(static_cast<SaveUpdateData*>(arg));
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Inventory: Saving update (%lu nodes)", data->hosts.size());
+    LOG_INFO("Inventory: Saving update ({} nodes)", data->hosts.size());
 
     for (HostInfo & info : data->hosts)
         data->self.m_host_info[info.host] = info;
@@ -166,13 +167,13 @@ void Inventory::execute_reload(void *arg)
 
     if (!self.m_service) {
         // Previous attempt to connect to the cocaine worker failed. Try again.
-        BH_LOG(app::logger(), DNET_LOG_INFO, "Inventory: Trying to reconnect to cocaine worker");
+        LOG_INFO("Inventory: Trying to reconnect to cocaine worker");
         self.cocaine_connect();
     }
 
     if (!self.m_conn) {
         // Previous attempt to connect to the database failed. Try again.
-        BH_LOG(app::logger(), DNET_LOG_INFO, "Inventory: Trying to reconnect to database");
+        LOG_INFO("Inventory: Trying to reconnect to database");
         if (self.cache_db_connect() != 0) {
             if (!self.m_stopped)
                 self.dispatch_next_reload();
@@ -180,7 +181,7 @@ void Inventory::execute_reload(void *arg)
         }
     }
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Reloading cache");
+    LOG_INFO("Reloading cache");
 
     time_t reload_start = ::time(nullptr);
 
@@ -237,7 +238,7 @@ void Inventory::execute_get_dc_by_host(void *arg)
 
     auto it = data.self.m_host_info.find(data.host);
     if (it != data.self.m_host_info.end()) {
-        BH_LOG(app::logger(), DNET_LOG_DEBUG, "Inventory: Found host '%s' in map, DC is '%s'",
+        LOG_DEBUG("Inventory: Found host '{}' in map, DC is '{}'",
                 data.host, it->second.dc);
         data.result = it->second.dc;
         return;
@@ -247,8 +248,8 @@ void Inventory::execute_get_dc_by_host(void *arg)
     info.host = data.host;
 
     if (data.self.fetch_from_cocaine(info) != 0) {
-        BH_LOG(app::logger(), DNET_LOG_NOTICE, "Inventory: Failed to fetch host info "
-                "from cocaine, defaulting DC=host='%s'", data.host);
+        LOG_NOTICE("Inventory: Failed to fetch host info "
+                   "from cocaine, defaulting DC=host='{}'", data.host);
         data.result = data.host;
         return;
     }
@@ -279,16 +280,16 @@ int Inventory::fetch_from_cocaine(HostInfo & info)
         obj = result.get();
 
         if (obj.type != msgpack::type::RAW) {
-            throw std::runtime_error("inventory worker returned object of unexpected type " +
+            throw std::runtime_error(
+                    "inventory worker returned object of unexpected type " +
                     std::to_string(int(obj.type)));
         }
     } catch (std::exception & e) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Inventory: Could not resolve DC for host %s: %s", info.host, e.what());
+        LOG_ERROR("Inventory: Could not resolve DC for host {}: {}", info.host, e.what());
         return -1;
     } catch (...) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Inventory: Could not resolve DC for host %s: unknown exception thrown", info.host);
+        LOG_ERROR("Inventory: Could not resolve DC for host {}: "
+                  "unknown exception thrown", info.host);
         return -1;
     }
 
@@ -350,11 +351,11 @@ void Inventory::cocaine_connect()
 
         return;
     } catch (std::exception & e) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR, "Failed to connect to service %s: %s",
+        LOG_ERROR("Failed to connect to service {}: {}",
                 service_name, e.what());
     } catch (...) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR, "Failed to connect to service %s: "
-                "unknown exception thrown", service_name);
+        LOG_ERROR("Failed to connect to service {}: unknown exception thrown",
+                service_name);
     }
 
     m_service.reset();
@@ -366,40 +367,35 @@ int Inventory::cache_db_connect()
         const Config & config = app::config();
 
         if (config.metadata.url.empty() || config.metadata.inventory.db.empty()) {
-            BH_LOG(app::logger(), DNET_LOG_WARNING,
-                    "Not connecting to inventory database because it was not configured");
+            LOG_WARNING("Not connecting to inventory database because it was not configured");
             return -1;
         }
 
         std::string errmsg;
         mongo::ConnectionString cs = mongo::ConnectionString::parse(config.metadata.url, errmsg);
         if (!cs.isValid()) {
-            BH_LOG(app::logger(), DNET_LOG_ERROR,
-                    "Mongo client ConnectionString error: %s", errmsg);
+            LOG_ERROR("Mongo client ConnectionString error: {}", errmsg);
             return -1;
         }
 
         m_conn.reset((mongo::DBClientReplicaSet *) cs.connect(
                 errmsg, double(config.metadata.options.connectTimeoutMS) / 1000.0));
         if (m_conn == nullptr) {
-            BH_LOG(app::logger(), DNET_LOG_ERROR, "Connection failed: %s", errmsg);
+            LOG_ERROR("Connection failed: {}", errmsg);
             return -1;
         }
 
         m_collection_name = config.metadata.inventory.db + ".hostname_to_dc";
 
-        BH_LOG(app::logger(), DNET_LOG_INFO, "Successfully connected to inventory database");
+        LOG_INFO("Successfully connected to inventory database");
         return 0;
 
     } catch (const mongo::DBException & e) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Inventory: MongoDB thrown exception during database connection: %s", e.what());
+        LOG_ERROR("Inventory: MongoDB thrown exception during database connection: {}", e.what());
     } catch (const std::exception & e) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Exception thrown while connecting to inventory database: %s", e.what());
+        LOG_ERROR("Exception thrown while connecting to inventory database: {}", e.what());
     } catch (...) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Unknown exception thrown while connecting to inventory database");
+        LOG_ERROR("Unknown exception thrown while connecting to inventory database");
     }
 
     m_conn.reset();
@@ -414,8 +410,8 @@ std::vector<Inventory::HostInfo> Inventory::load_cache_db()
     if (m_conn == nullptr)
         return result;
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Inventory: Loading cache database "
-            "(last update ts=%ld)", long(m_last_update_time));
+    LOG_INFO("Inventory: Loading cache database (last update ts={})",
+            m_last_update_time);
 
     try {
         // Read preference PrimaryPreferred lets us to read when primary is unavailable.
@@ -428,33 +424,27 @@ std::vector<Inventory::HostInfo> Inventory::load_cache_db()
 
             try {
                 HostInfo info(obj);
-                BH_LOG(app::logger(), DNET_LOG_INFO, "Loaded DC '%s' for host '%s' (updated at %lu)",
+                LOG_INFO("Loaded DC '{}' for host '{}' (updated at {})",
                         info.dc, info.host, info.timestamp);
 
                 result.emplace_back(std::move(info));
             } catch (const mongo::MsgAssertionException & e) {
-                BH_LOG(app::logger(), DNET_LOG_ERROR,
-                        "Initializing HostInfo from BSON: msg assertion exception: '%s'", e.what());
+                LOG_ERROR("Initializing HostInfo from BSON: msg assertion exception: {}", e.what());
             } catch (const std::exception & e) {
-                BH_LOG(app::logger(), DNET_LOG_ERROR,
-                        "Initializing HostInfo from BSON: exception thrown: '%s'", e.what());
+                LOG_ERROR("Initializing HostInfo from BSON: exception thrown: {}", e.what());
             } catch (...) {
-                BH_LOG(app::logger(), DNET_LOG_ERROR,
-                        "Initializing HostInfo from BSON: unknown exception thrown");
+                LOG_ERROR("Initializing HostInfo from BSON: unknown exception thrown");
             }
         }
 
-        BH_LOG(app::logger(), DNET_LOG_INFO, "Updated inventory info for %lu hosts", result.size());
+        LOG_INFO("Updated inventory info for {} hosts", result.size());
 
     } catch (const mongo::DBException & e) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Cannot load cache db: Inventory DB thrown exception: %s", e.what());
+        LOG_ERROR("Cannot load cache db: Inventory DB thrown exception: {}", e.what());
     } catch (const std::exception & e) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Exception thrown while loading inventory database: %s", e.what());
+        LOG_ERROR("Exception thrown while loading inventory database: {}", e.what());
     } catch (...) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Unknown exception thrown while loading inventory database");
+        LOG_ERROR("Unknown exception thrown while loading inventory database");
     }
 
     return result;
@@ -473,22 +463,18 @@ void Inventory::cache_db_update(const HostInfo & info)
     if (m_conn == nullptr)
         return;
 
-    BH_LOG(app::logger(), DNET_LOG_INFO, "Adding host info to inventory database: "
-            "host: '%s' DC: '%s' timestamp: %lu\n",
-            info.host, info.dc, info.timestamp);
+    LOG_INFO("Adding host info to inventory database: host: "
+             "'{}' DC: '{}' timestamp: {}", info.host, info.dc, info.timestamp);
 
     try {
         // Update database record. The fourth argument ('upsert') indicates
         // that the entry must be created or updated if already exists.
         m_conn->update(m_collection_name, MONGO_QUERY("host" << info.host), info.obj(), 1);
     } catch (const mongo::DBException & e) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Cannot update cache db: Inventory DB thrown exception: %s", e.what());
+        LOG_ERROR("Cannot update cache db: Inventory DB thrown exception: {}", e.what());
     } catch (const std::exception & e) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Exception thrown while updating inventory database: %s", e.what());
+        LOG_ERROR("Exception thrown while updating inventory database: {}", e.what());
     } catch (...) {
-        BH_LOG(app::logger(), DNET_LOG_ERROR,
-                "Unknown exception thrown while updating inventory database");
+        LOG_ERROR("Unknown exception thrown while updating inventory database");
     }
 }
