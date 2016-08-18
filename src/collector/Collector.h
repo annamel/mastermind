@@ -20,6 +20,7 @@
 #define __4e5e1746_2d12_42c1_9384_b1a59c632ca3
 
 #include "Discovery.h"
+#include "Filter.h"
 #include "Inventory.h"
 #include "Round.h"
 #include "Storage.h"
@@ -61,10 +62,21 @@ public:
     void stop();
 
 public:
-    void force_update(std::shared_ptr<on_force_update> handler);
-    void get_snapshot(std::shared_ptr<on_get_snapshot> handler);
-    void summary(std::shared_ptr<on_summary> handler);
-    void refresh(std::shared_ptr<on_refresh> handler);
+    typedef std::tuple<Collector*,
+            cocaine::framework::worker::sender> Step1StartForcedArg;
+    typedef std::tuple<Collector*,
+            cocaine::framework::worker::sender,
+            Filter> Step1StartRefreshArg;
+    typedef std::tuple<Collector*,
+            cocaine::framework::worker::sender,
+            Filter> ExecuteGetSnapshotArg;
+    typedef std::tuple<Collector*,
+            cocaine::framework::worker::sender> ExecuteSummaryArg;
+
+    void force_update(cocaine::framework::worker::sender tx);
+    void get_snapshot(cocaine::framework::worker::sender tx, Filter filter);
+    void refresh(cocaine::framework::worker::sender tx, Filter filter);
+    void summary(cocaine::framework::worker::sender tx);
 
 private:
     static void step0_start_inventory(void *arg);

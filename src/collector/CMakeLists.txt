@@ -1,6 +1,5 @@
 set(COLLECTOR_SOURCES_COMMON
     Backend.cpp
-    CocaineHandlers.cpp
     Collector.cpp
     Config.cpp
     ConfigParser.cpp

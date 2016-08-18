@@ -16,7 +16,6 @@
    License along with Mastermind.
 */
 
-#include "CocaineHandlers.h"
 #include "FS.h"
 #include "Logger.h"
 #include "Metrics.h"
@@ -106,13 +105,14 @@ void Collector::step1_start_forced(void *arg)
 {
     app::logging::DefaultAttributes holder;
 
-    std::unique_ptr<std::shared_ptr<on_force_update>> handler_ptr(
-            static_cast<std::shared_ptr<on_force_update>*>(arg));
-    Collector & self = (*handler_ptr)->get_app().get_collector();
+    std::unique_ptr<Step1StartForcedArg> ptr{static_cast<Step1StartForcedArg*>(arg)};
+
+    Collector & self = *std::get<0>(*ptr);
+    cocaine::framework::worker::sender tx{std::move(std::get<1>(*ptr))};
 
     LOG_INFO("Collector user-requested full round: step 1");
 
-    Round *round = new Round(self, *handler_ptr);
+    Round *round = new Round(self, std::move(tx));
     self.m_discovery.resolve_nodes(*round);
     round->start();
 }
@@ -121,13 +121,15 @@ void Collector::step1_start_refresh(void *arg)
 {
     app::logging::DefaultAttributes holder;
 
-    std::unique_ptr<std::shared_ptr<on_refresh>> handler_ptr(
-            static_cast<std::shared_ptr<on_refresh>*>(arg));
-    Collector & self = (*handler_ptr)->get_app().get_collector();
+    std::unique_ptr<Step1StartRefreshArg> ptr{static_cast<Step1StartRefreshArg*>(arg)};
+
+    Collector & self = *std::get<0>(*ptr);
+    cocaine::framework::worker::sender tx{std::move(std::get<1>(*ptr))};
+    Filter filter{std::move(std::get<2>(*ptr))};
 
     LOG_INFO("Collector user-requested refresh round: step 1");
 
-    Round *round = new Round(self, *handler_ptr);
+    Round *round = new Round(self, std::move(tx), std::move(filter));
     round->start();
 }
 
@@ -135,7 +137,7 @@ void Collector::step5_compare_and_swap(void *arg)
 {
     app::logging::DefaultAttributes holder;
 
-    std::unique_ptr<Round> round(static_cast<Round*>(arg));
+    std::unique_ptr<Round> round{static_cast<Round*>(arg)};
     Collector & self = round->get_collector();
 
     if (self.m_storage_version == round->get_old_storage_version()) {
@@ -158,20 +160,18 @@ void Collector::step5_compare_and_swap(void *arg)
         if (type == Round::REGULAR) {
             self.schedule_next_round();
         } else {
-            std::shared_ptr<on_force_update> handler = round->get_on_force_handler();
-
             std::ostringstream ostr;
             ostr << "Update completed in " << MSEC(round_clock.total) << " ms";
-            handler->response()->write(ostr.str());
-            handler->response()->close();
+
+            auto & tx = round->get_cocaine_sender();
+            tx.write(ostr.str()).get();
         }
     } else {
-        std::shared_ptr<on_refresh> handler = round->get_on_refresh_handler();
-
         std::ostringstream ostr;
         ostr << "Refresh completed in " << MSEC(round_clock.total) << " ms";
-        handler->response()->write(ostr.str());
-        handler->response()->close();
+
+        auto & tx = round->get_cocaine_sender();
+        tx.write(ostr.str()).get();
     }
 }
 
@@ -192,15 +192,9 @@ void Collector::step6_merge_and_try_again(void *arg)
             self.schedule_next_round();
         } else {
             static const std::string response = "Round completed, but nothing to update yet";
-            if (type == Round::FORCED_FULL) {
-                std::shared_ptr<on_force_update> handler = round->get_on_force_handler();
-                handler->response()->write(response);
-                handler->response()->close();
-            } else {
-                std::shared_ptr<on_refresh> handler = round->get_on_refresh_handler();
-                handler->response()->write(response);
-                handler->response()->close();
-            }
+
+            auto & tx = round->get_cocaine_sender();
+            tx.write(response).get();
         }
     }
 
@@ -216,35 +210,40 @@ void Collector::schedule_next_round()
             m_queue, this, &Collector::step1_start_round);
 }
 
-void Collector::force_update(std::shared_ptr<on_force_update> handler)
+void Collector::force_update(cocaine::framework::worker::sender tx)
 {
-    dispatch_async_f(m_queue, new std::shared_ptr<on_force_update>(handler), &Collector::step1_start_forced);
+    auto *arg = new Step1StartForcedArg{this, std::move(tx)};
+    dispatch_async_f(m_queue, static_cast<void*>(arg), &Collector::step1_start_forced);
 }
 
-void Collector::get_snapshot(std::shared_ptr<on_get_snapshot> handler)
+void Collector::get_snapshot(cocaine::framework::worker::sender tx, Filter filter)
 {
-    dispatch_async_f(m_queue, new std::shared_ptr<on_get_snapshot>(handler), &Collector::execute_get_snapshot);
+    auto *arg = new ExecuteGetSnapshotArg{this, std::move(tx), std::move(filter)};
+    dispatch_async_f(m_queue, static_cast<void*>(arg), &Collector::execute_get_snapshot);
 }
 
-void Collector::summary(std::shared_ptr<on_summary> handler)
+void Collector::refresh(cocaine::framework::worker::sender tx, Filter filter)
 {
-    dispatch_async_f(m_queue, new std::shared_ptr<on_summary>(handler), &Collector::execute_summary);
+    auto *arg = new Step1StartRefreshArg{this, std::move(tx), std::move(filter)};
+    dispatch_async_f(m_queue, static_cast<void*>(arg), &Collector::step1_start_refresh);
 }
 
-void Collector::refresh(std::shared_ptr<on_refresh> handler)
+void Collector::summary(cocaine::framework::worker::sender tx)
 {
-    dispatch_async_f(m_queue, new std::shared_ptr<on_refresh>(handler), &Collector::step1_start_refresh);
+    auto *arg = new ExecuteSummaryArg{this, std::move(tx)};
+    dispatch_async_f(m_queue, static_cast<void*>(arg), &Collector::execute_summary);
 }
 
 void Collector::execute_get_snapshot(void *arg)
 {
     app::logging::DefaultAttributes holder;
 
-    std::unique_ptr<std::shared_ptr<on_get_snapshot>> handler_ptr(
-            static_cast<std::shared_ptr<on_get_snapshot>*>(arg));
-    Collector & self = (*handler_ptr)->get_app().get_collector();
+    std::unique_ptr<ExecuteGetSnapshotArg> ptr{static_cast<ExecuteGetSnapshotArg*>(arg)};
 
-    Filter & filter = (*handler_ptr)->get_filter();
+    Collector & self = *std::get<0>(*ptr);
+    cocaine::framework::worker::sender tx{std::move(std::get<1>(*ptr))};
+    Filter filter{std::move(std::get<2>(*ptr))};
+
     std::string result;
 
     if (filter.empty())
@@ -252,17 +251,17 @@ void Collector::execute_get_snapshot(void *arg)
     else
         self.m_storage->print_json(filter, !!filter.show_internals, result);
 
-    (*handler_ptr)->response()->write(result);
-    (*handler_ptr)->response()->close();
+    tx.write(result).get();
 }
 
 void Collector::execute_summary(void *arg)
 {
     app::logging::DefaultAttributes holder;
 
-    std::unique_ptr<std::shared_ptr<on_summary>> handler_ptr(
-            static_cast<std::shared_ptr<on_summary>*>(arg));
-    Collector & self = (*handler_ptr)->get_app().get_collector();
+    std::unique_ptr<ExecuteSummaryArg> ptr{static_cast<ExecuteSummaryArg*>(arg)};
+
+    Collector & self = *std::get<0>(*ptr);
+    cocaine::framework::worker::sender tx{std::move(std::get<1>(*ptr))};
 
     std::map<std::string, Node> & nodes = self.m_storage->get_nodes();
     std::map<int, Group> & groups = self.m_storage->get_groups();
@@ -373,6 +372,5 @@ void Collector::execute_summary(void *arg)
         ostr << "Distribution for couple update_status:\n" << distrib.str();
     }
 
-    (*handler_ptr)->response()->write(ostr.str());
-    (*handler_ptr)->response()->close();
+    tx.write(ostr.str()).get();
 }

@@ -27,7 +27,7 @@ set(COLLECTOR_LIBRARIES
     ${elliptics_client_LIBRARY}
     ${elliptics_cpp_LIBRARY}
     ${CocaineNative_LIBRARIES}
-    ${Cocaine_LIBRARY}
+    ${Cocaine_LIBRARIES}
     ${CURL_LIBRARIES}
     ${BLACKHOLE_LIBRARIES}
     boost_system
