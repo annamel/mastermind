@@ -107,7 +107,7 @@ class Infrastructure(object):
     )
 
     CLEANUP_CMD = (
-            'langolier -g {groups} -G {iter_group} '
+            'mds_cleanup -g {groups} -G {iter_group} '
             '-l {log} -L {log_level} -t {temp_dir} -T {trace_id} '
             '-w {wait_timeout} -a {attemps} -b {batch_size} -n {nproc} '
             )
@@ -613,8 +613,7 @@ class Infrastructure(object):
         # e.g. config.get('infrastructure',{}).get('lrc_convert', {})
 
         cmd = self.CLEANUP_CMD.format(
-            remotes=remotes,
-            groups=groups,
+            groups=",".join(str(g) for g in groups),
             iter_group=iter_group,
             attemps=attemps,
             wait_timeout=wait_timeout,
