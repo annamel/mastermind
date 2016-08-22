@@ -57,7 +57,7 @@ class MdsCleanupJob(Job):
             batch_size=self.batch_size,
             attemps=self.attemps,
             nproc=self.nproc,
-            trace_id=self.id[:16])
+            trace_id=int(self.id[:16], 16))
 
         if self.iter_group not in storage.groups:
             logger.error("Not valid iter group is specified for create task %s", self.iter_group)
