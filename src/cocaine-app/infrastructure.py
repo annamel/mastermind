@@ -608,21 +608,19 @@ class Infrastructure(object):
                     nproc=10,
                     trace_id=100):
 
-        # XXX: params (including batch, attemps, nproc, log_level, file, tmp)
-        # must be extracted from config
-        # e.g. config.get('infrastructure',{}).get('lrc_convert', {})
+        CLEANUP_CNF = config.get('infrastructure', {}).get('mds_cleanup', {})
 
         cmd = self.CLEANUP_CMD.format(
             groups=",".join(str(g) for g in groups),
             iter_group=iter_group,
-            attemps=attemps,
-            wait_timeout=wait_timeout,
-            nproc=nproc,
-            batch_size=batch_size,
+            attemps=(attemps if attemps != None else CLEANUP_CNF.get('attemps', 3)),
+            wait_timeout=(wait_timeout if wait_timeout != None else CLEANUP_CNF.get('wait_timeout', 20)),
+            nproc=(nproc if nproc != None else CLEANUP_CNF.get('nproc', 10)),
+            batch_size=(batch_size if batch_size != None else CLEANUP_CNF.get('batch_size', 100)),
             trace_id=trace_id,
-            log="temp.log",  # XXX: fixme
-            log_level="debug",  # XXX: fixme
-            temp_dir="/tmp/")
+            log=CLEANUP_CNF.get('log', 'langolier.log'),
+            log_level="debug",
+            temp_dir=CLEANUP_CNF.get('tmp_dir', '/var/tmp/mds_cleanup'))
 
         for rt in remotes:
             cmd += ' -r {}'.format(rt)
