@@ -608,7 +608,7 @@ class Infrastructure(object):
                     nproc=10,
                     trace_id=100):
 
-        CLEANUP_CNF = config.get('infrastructure', {}).get('mds_cleanup', {})
+        CLEANUP_CNF = config.get('infrastructure', {}).get('ttl_cleanup', {})
 
         cmd = self.CLEANUP_CMD.format(
             groups=",".join(str(g) for g in groups),
@@ -618,9 +618,9 @@ class Infrastructure(object):
             nproc=(nproc if nproc != None else CLEANUP_CNF.get('nproc', 10)),
             batch_size=(batch_size if batch_size != None else CLEANUP_CNF.get('batch_size', 100)),
             trace_id=trace_id,
-            log=CLEANUP_CNF.get('log', 'langolier.log'),
+            log=CLEANUP_CNF.get('log', 'ttl_cleanup.log'),
             log_level="debug",
-            temp_dir=CLEANUP_CNF.get('tmp_dir', '/var/tmp/mds_cleanup'))
+            temp_dir=CLEANUP_CNF.get('tmp_dir', '/var/tmp/ttl_cleanup'))
 
         for rt in remotes:
             cmd += ' -r {}'.format(rt)
