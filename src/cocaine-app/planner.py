@@ -1678,10 +1678,10 @@ class Planner(object):
 
     def cleanup(self, request):
         """
-        Langolier job. Remove all records with expired TTL
+        TTL cleanup job. Remove all records with expired TTL
         """
         job = self.job_processor._create_job(
-                    job_type=jobs.JobTypes.TYPE_TTL_CLEANUP,
+                    job_type=jobs.JobTypes.TYPE_TTL_CLEANUP_JOB,
                     params=request)
 
         return job.dump()

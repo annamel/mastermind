@@ -106,10 +106,11 @@ class Infrastructure(object):
         '--data-flow-rate {data_flow_rate} --wait-timeout {wait_timeout}'
     )
 
-    CLEANUP_CMD = (
-            'mds_cleanup -g {groups} -G {iter_group} '
-            '-l {log} -L {log_level} -t {temp_dir} -T {trace_id} '
-            '-w {wait_timeout} -a {attemps} -b {batch_size} -n {nproc} '
+    TTL_CLEANUP_CMD = (
+            'mds_cleanup --groups {groups} --iterate-group {iter_group} '
+            '--log {log} --log-level {log_level} --tmp {temp_dir} --trace-id {trace_id} '
+            '--wait-timeout {wait_timeout} --attempts {attempts} --batch-size {batch_size} '
+            '--nproc {nproc} {safe} {remotes}'
             )
 
     def __init__(self):
@@ -597,36 +598,33 @@ class Infrastructure(object):
                 file_tpl=file_tpl)
         return cmd
 
-    def cleanup_cmd(self,
+    def ttl_cleanup_cmd(self,
                     remotes,
                     groups,
                     iter_group,
-                    safe=True,
-                    attemps=5,
-                    wait_timeout=20,
-                    batch_size=100,
-                    nproc=10,
-                    trace_id=100):
+                    trace_id,
+                    safe=False,
+                    attempts=None,
+                    wait_timeout=None,
+                    batch_size=None,
+                    nproc=None):
 
-        CLEANUP_CNF = config.get('infrastructure', {}).get('ttl_cleanup', {})
+        TTL_CLEANUP_CNF = config.get('infrastructure', {}).get('ttl_cleanup', {})
 
-        cmd = self.CLEANUP_CMD.format(
+        cmd = self.TTL_CLEANUP_CMD.format(
             groups=",".join(str(g) for g in groups),
             iter_group=iter_group,
-            attemps=(attemps if attemps != None else CLEANUP_CNF.get('attemps', 3)),
-            wait_timeout=(wait_timeout if wait_timeout != None else CLEANUP_CNF.get('wait_timeout', 20)),
-            nproc=(nproc if nproc != None else CLEANUP_CNF.get('nproc', 10)),
-            batch_size=(batch_size if batch_size != None else CLEANUP_CNF.get('batch_size', 100)),
+            attempts=(attempts or TTL_CLEANUP_CNF.get('attempts', 3)),
+            wait_timeout=(wait_timeout or TTL_CLEANUP_CNF.get('wait_timeout', 20)),
+            nproc=(nproc or TTL_CLEANUP_CNF.get('nproc', 10)),
+            batch_size=(batch_size or TTL_CLEANUP_CNF.get('batch_size', 100)),
             trace_id=trace_id,
-            log=CLEANUP_CNF.get('log', 'ttl_cleanup.log'),
+            log=TTL_CLEANUP_CNF.get('log', 'ttl_cleanup.log'),
             log_level="debug",
-            temp_dir=CLEANUP_CNF.get('tmp_dir', '/var/tmp/ttl_cleanup'))
-
-        for rt in remotes:
-            cmd += ' -r {}'.format(rt)
-
-        if safe:
-            cmd += ' -S'
+            temp_dir=TTL_CLEANUP_CNF.get('tmp_dir', '/var/tmp/ttl_cleanup'),
+            safe=('-S' if safe else ''),
+            remotes=("-r " + " -r ".join(rt for rt in remotes))
+            )
 
         return cmd
 
