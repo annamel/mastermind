@@ -1860,6 +1860,7 @@ def mds_cleanup(iter_group,
                 attemps=('a', '', 'The retry count'),
                 nproc=('n', '', 'A number of threads in session'),
                 wait_timeout=('w', '', 'Timeout for elliptics operations'),
+                dry_run=('d', False, 'Dry-run mode'),
                 host=None, app=None):
     '''
     Run langolier. Remove records with TTL expired
@@ -1878,7 +1879,7 @@ def mds_cleanup(iter_group,
         'attemps': attemps,
         'nproc': nproc,
         'wait_timeout': wait_timeout,
-        'safe': False  # always True for 'view' sub-command
+        'safe': dry_run
         }
 
     res = s.enqueue('cleanup', msgpack.packb(params)).get()
