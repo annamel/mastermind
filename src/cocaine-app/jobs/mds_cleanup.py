@@ -24,7 +24,6 @@ class MdsCleanupJob(Job):
     def __init__(self, **kwargs):
         super(MdsCleanupJob, self).__init__(**kwargs)
         self.type = JobTypes.TYPE_CLEANUP
-        logger.error("MDS cleanup job inited")
 
     def _set_resources(self):
         self.resources = {
@@ -45,8 +44,6 @@ class MdsCleanupJob(Job):
         self.resources[Job.RESOURCE_FS].append((nb.node.host.addr, str(nb.fs.fsid)))
 
     def create_tasks(self):
-        logger.error("Cleanup job: groups={} (iter={}), batch_size={}, remotes={}, attemps={}".format(
-            self.groups, self.iter_group, self.batch_size, self.remotes, self.attemps))
 
         # Log, Log_level, temp to be taken from config on infrastructure side
         langolier_cmd = infrastructure.cleanup_cmd(
@@ -63,7 +60,7 @@ class MdsCleanupJob(Job):
             logger.error("Not valid iter group is specified for create task %s", self.iter_group)
             return None
 
-        logger.error("Cleanup job: Set for execution task %s", langolier_cmd)
+        logger.debug("Cleanup job: Set for execution task %s", langolier_cmd)
 
         # Run langolier on the storage node where we are going to iterate
         nb = storage.groups[self.iter_group].node_backends[0]
