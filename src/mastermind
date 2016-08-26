@@ -1879,7 +1879,7 @@ def mds_cleanup(iter_group,
         'attemps': attemps,
         'nproc': nproc,
         'wait_timeout': wait_timeout,
-        'safe': dry_run
+        'dry_run': dry_run
         }
 
     res = s.enqueue('cleanup', msgpack.packb(params)).get()
