@@ -41,7 +41,7 @@ class TtlCleanupJob(Job):
         # operation. No data is written. And no data is read.
         # While iteration group node is working heavily
         nb = storage.groups[self.iter_group].node_backends[0]
-        self.resources[Job.RESOURCE_HOST_OUT].append(nb.node.host.addr)
+        self.resources[Job.RESOURCE_HOST_IN].append(nb.node.host.addr)
         self.resources[Job.RESOURCE_FS].append((nb.node.host.addr, str(nb.fs.fsid)))
 
     def create_tasks(self):
