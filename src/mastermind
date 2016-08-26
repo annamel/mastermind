@@ -1849,7 +1849,7 @@ def lrc_groupset_convert(groupset=('g',
 
     return
 
-# langolier commands
+# TTL cleanup commands
 cleanupDispatcher = Dispatcher(globaloptions=(host_param, app_param))
 @cleanupDispatcher.command(name='run')
 @log_action
@@ -1863,7 +1863,7 @@ def mds_cleanup(iter_group,
                 dry_run=('d', False, 'Dry-run mode'),
                 host=None, app=None):
     '''
-    Run langolier. Remove records with TTL expired
+    Run mds cleanup command from langolier package. Remove records with TTL expired
     '''
     s = service(host, app)
 
