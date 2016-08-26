@@ -46,13 +46,13 @@ class MdsCleanupJob(Job):
     def create_tasks(self):
 
         # Log, Log_level, temp to be taken from config on infrastructure side
-        langolier_cmd = infrastructure.cleanup_cmd(
+        langolier_cmd = infrastructure.ttl_cleanup_cmd(
             remotes=self.remotes,
             groups=self.groups,
             iter_group=self.iter_group,
             wait_timeout=self.wait_timeout,
             batch_size=self.batch_size,
-            attemps=self.attemps,
+            attempts=self.attemps,
             nproc=self.nproc,
             trace_id=int(self.id[:16], 16),
             safe=self.dry_run)
