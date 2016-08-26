@@ -23,7 +23,7 @@ class MdsCleanupJob(Job):
 
     def __init__(self, **kwargs):
         super(MdsCleanupJob, self).__init__(**kwargs)
-        self.type = JobTypes.TYPE_TTL_CLEANUP
+        self.type = JobTypes.TYPE_TTL_CLEANUP_JOB
 
     def _set_resources(self):
         self.resources = {
