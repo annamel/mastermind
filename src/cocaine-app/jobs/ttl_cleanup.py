@@ -7,7 +7,8 @@ from infrastructure import infrastructure
 
 logger = logging.getLogger('mm.jobs')
 
-class MdsCleanupJob(Job):
+
+class TtlCleanupJob(Job):
 
     PARAMS = (
         'groups',
@@ -22,7 +23,7 @@ class MdsCleanupJob(Job):
     )
 
     def __init__(self, **kwargs):
-        super(MdsCleanupJob, self).__init__(**kwargs)
+        super(TtlCleanupJob, self).__init__(**kwargs)
         self.type = JobTypes.TYPE_TTL_CLEANUP_JOB
 
     def _set_resources(self):
@@ -30,10 +31,10 @@ class MdsCleanupJob(Job):
             Job.RESOURCE_HOST_IN: [],
             Job.RESOURCE_HOST_OUT: [],
             Job.RESOURCE_FS: [],
-            }
+        }
 
         if self.iter_group not in storage.groups:
-            logger.error("Not valid iter group is specified %s", self.iter_group)
+            logger.error("Specified iter group {} has not been found".format(self.iter_group))
             return None
 
         # The nodes that are not iterated would be asked to perform remove
@@ -46,7 +47,7 @@ class MdsCleanupJob(Job):
     def create_tasks(self):
 
         # Log, Log_level, temp to be taken from config on infrastructure side
-        langolier_cmd = infrastructure.ttl_cleanup_cmd(
+        ttl_cleanup_cmd = infrastructure.ttl_cleanup_cmd(
             remotes=self.remotes,
             groups=self.groups,
             iter_group=self.iter_group,
@@ -58,15 +59,21 @@ class MdsCleanupJob(Job):
             safe=self.dry_run)
 
         if self.iter_group not in storage.groups:
-            logger.error("Not valid iter group is specified for create task %s", self.iter_group)
+            logger.error("Specified iter group {} has not been found".format(self.iter_group))
             return None
 
-        logger.debug("Cleanup job: Set for execution task %s", langolier_cmd)
+        logger.debug("TTl cleanup job: Set for execution task %s", ttl_cleanup_cmd)
 
         # Run langolier on the storage node where we are going to iterate
         nb = storage.groups[self.iter_group].node_backends[0]
         host = nb.node.host.addr
-        task = tasks.MinionCmdTask.new(self, host=host, group=self.iter_group, cmd=langolier_cmd, params={})
+        task = tasks.MinionCmdTask.new(
+            self,
+            host=host,
+            group=self.iter_group,
+            cmd=ttl_cleanup_cmd,
+            params={},
+        )
         self.tasks.append(task)
 
     @property
@@ -76,4 +83,3 @@ class MdsCleanupJob(Job):
     @property
     def _involved_couples(self):
         return []
-
