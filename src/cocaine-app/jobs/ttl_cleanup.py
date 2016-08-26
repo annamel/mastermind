@@ -15,7 +15,7 @@ class TtlCleanupJob(Job):
         'iter_group',
         'batch_size',
         'remotes',
-        'attemps',
+        'attempts',
         'nproc',
         'wait_timeout',
         'dry_run',
@@ -53,7 +53,7 @@ class TtlCleanupJob(Job):
             iter_group=self.iter_group,
             wait_timeout=self.wait_timeout,
             batch_size=self.batch_size,
-            attempts=self.attemps,
+            attempts=self.attempts,
             nproc=self.nproc,
             trace_id=int(self.id[:16], 16),
             safe=self.dry_run)
