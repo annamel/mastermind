@@ -11,10 +11,8 @@ logger = logging.getLogger('mm.jobs')
 class TtlCleanupJob(Job):
 
     PARAMS = (
-        'groups',
         'iter_group',
         'batch_size',
-        'remotes',
         'attempts',
         'nproc',
         'wait_timeout',
@@ -45,11 +43,23 @@ class TtlCleanupJob(Job):
         self.resources[Job.RESOURCE_FS].append((nb.node.host.addr, str(nb.fs.fsid)))
 
     def create_tasks(self):
+        if self.iter_group not in storage.groups:
+            logger.error("Specified iter group {} has not been found".format(self.iter_group))
+            return None
+
+        iter_group_desc = storage.groups[self.iter_group]
+        couple = iter_group_desc.couple
+        groups = []
+        remotes = []
+        for g in couple.groups:
+            groups.append(g.group_id)
+            node = g.node_backends[0].node
+            remotes.append("{}:{}:{}".format(node.host.addr, node.port, node.family))
 
         # Log, Log_level, temp to be taken from config on infrastructure side
         ttl_cleanup_cmd = infrastructure.ttl_cleanup_cmd(
-            remotes=self.remotes,
-            groups=self.groups,
+            remotes=remotes,
+            groups=groups,
             iter_group=self.iter_group,
             wait_timeout=self.wait_timeout,
             batch_size=self.batch_size,
@@ -58,14 +68,10 @@ class TtlCleanupJob(Job):
             trace_id=int(self.id[:16], 16),
             safe=self.dry_run)
 
-        if self.iter_group not in storage.groups:
-            logger.error("Specified iter group {} has not been found".format(self.iter_group))
-            return None
-
         logger.debug("TTl cleanup job: Set for execution task %s", ttl_cleanup_cmd)
 
         # Run langolier on the storage node where we are going to iterate
-        nb = storage.groups[self.iter_group].node_backends[0]
+        nb = iter_group_desc.node_backends[0]
         host = nb.node.host.addr
         task = tasks.MinionCmdTask.new(
             self,
@@ -78,8 +84,15 @@ class TtlCleanupJob(Job):
 
     @property
     def _involved_groups(self):
-        return self.groups
+        if self.iter_group not in storage.groups:
+            return []
+
+        couple = storage.groups[self.iter_group].couple
+        return [g.group_id for g in couple.groups]
 
     @property
     def _involved_couples(self):
-        return []
+        if self.iter_group not in storage.groups:
+            return []
+
+        return [str(storage.groups[self.iter_group].couple)]
