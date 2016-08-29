@@ -1684,26 +1684,18 @@ class Planner(object):
         # The function requires some preliminary parameters parsing
         # since it may be there first validation and we would fail
         # with completely unexpected and unpredicted arguments
-        if 'groups' not in request:
-            raise ValueError('Request should contain "groups" field')
-
         if 'iter_group' not in request:
             raise ValueError('Request should contain iter_group field')
-
-        if 'remotes' not in request:
-            raise ValueError('Request should contain remotes field')
 
         job = self.job_processor._create_job(
             job_type=jobs.JobTypes.TYPE_TTL_CLEANUP_JOB,
             params={
-                'groups': request['groups'],
                 'iter_group': request['iter_group'],
-                'remotes': request['remotes'],
-                'batch_size': request['batch_size'] if 'batch_size' in request else None,
-                'attempts': request['attempts'] if 'attempts' in request else None,
-                'nproc': request['nproc'] if 'nproc' in request else None,
-                'wait_timeout': request['wait_timeout'] if 'wait_timeout' in request else None,
-                'dry_run': request['dry_run'] if 'dry_run' in request else None,
+                'batch_size': request.get('batch_size'),
+                'attempts': request.get('attempts'),
+                'nproc': request.get('nproc'),
+                'wait_timeout': request.get('wait_timeout'),
+                'dry_run': request.get('dry_run'),
             },
         )
 

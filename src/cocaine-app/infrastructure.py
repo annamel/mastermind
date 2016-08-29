@@ -602,7 +602,7 @@ class Infrastructure(object):
                     remotes,
                     groups,
                     iter_group,
-                    trace_id,
+                    trace_id=None,
                     safe=False,
                     attempts=None,
                     wait_timeout=None,
@@ -618,12 +618,12 @@ class Infrastructure(object):
             wait_timeout=(wait_timeout or TTL_CLEANUP_CNF.get('wait_timeout', 20)),
             nproc=(nproc or TTL_CLEANUP_CNF.get('nproc', 10)),
             batch_size=(batch_size or TTL_CLEANUP_CNF.get('batch_size', 100)),
-            trace_id=trace_id,
+            trace_id=(trace_id or int(uuid.uuid4().hex[:16], 16)),
             log=TTL_CLEANUP_CNF.get('log', 'ttl_cleanup.log'),
             log_level="debug",
             temp_dir=TTL_CLEANUP_CNF.get('tmp_dir', '/var/tmp/ttl_cleanup'),
             safe=('-S' if safe else ''),
-            remotes=("-r " + " -r ".join(rt for rt in remotes))
+            remotes=(' '.join('-r {}'.format(r) for r in remotes))
             )
 
         return cmd

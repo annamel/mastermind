@@ -1854,8 +1854,6 @@ cleanupDispatcher = Dispatcher(globaloptions=(host_param, app_param))
 @cleanupDispatcher.command(name='run')
 @log_action
 def mds_cleanup(iter_group, 
-                groups,
-                remotes,
                 batch_size=('b', '', 'The batch size (a number of records to be removed simultaneously)'),
                 attempts=('a', '', 'The retry count'),
                 nproc=('n', '', 'A number of threads in session'),
@@ -1868,13 +1866,9 @@ def mds_cleanup(iter_group,
     s = service(host, app)
 
     iter_group = int(iter_group)
-    groups = map(int, groups.split(','))
-    remotes = remotes.split(',')
 
     params = {
         'iter_group': iter_group,
-        'groups': groups,
-        'remotes': remotes,
         'batch_size': batch_size,
         'attempts': attempts,
         'nproc': nproc,
