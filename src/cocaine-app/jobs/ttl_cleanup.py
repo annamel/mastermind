@@ -11,10 +11,8 @@ logger = logging.getLogger('mm.jobs')
 class TtlCleanupJob(Job):
 
     PARAMS = (
-        'groups',
         'iter_group',
         'batch_size',
-        'remotes',
         'attempts',
         'nproc',
         'wait_timeout',
@@ -25,6 +23,7 @@ class TtlCleanupJob(Job):
     def __init__(self, **kwargs):
         super(TtlCleanupJob, self).__init__(**kwargs)
         self.type = JobTypes.TYPE_TTL_CLEANUP_JOB
+        self.groups = []
 
     def _set_resources(self):
         self.resources = {
@@ -37,6 +36,10 @@ class TtlCleanupJob(Job):
             logger.error("Specified iter group {} has not been found".format(self.iter_group))
             return None
 
+        self.couple = storage.groups[self.iter_group].couple
+        self.groups = [g.group_id for g in self.couple.groups]
+        self.remotes = [g.node_backends[0].node.host.addr for g in self.couple.groups]
+
         # The nodes that are not iterated would be asked to perform remove
         # operation. No data is written. And no data is read.
         # While iteration group node is working heavily
@@ -45,6 +48,9 @@ class TtlCleanupJob(Job):
         self.resources[Job.RESOURCE_FS].append((nb.node.host.addr, str(nb.fs.fsid)))
 
     def create_tasks(self):
+        if self.iter_group not in storage.groups:
+            logger.error("Specified iter group {} has not been found".format(self.iter_group))
+            return None
 
         # Log, Log_level, temp to be taken from config on infrastructure side
         ttl_cleanup_cmd = infrastructure.ttl_cleanup_cmd(
@@ -57,10 +63,6 @@ class TtlCleanupJob(Job):
             nproc=self.nproc,
             trace_id=int(self.id[:16], 16),
             safe=self.dry_run)
-
-        if self.iter_group not in storage.groups:
-            logger.error("Specified iter group {} has not been found".format(self.iter_group))
-            return None
 
         logger.debug("TTl cleanup job: Set for execution task %s", ttl_cleanup_cmd)
 
@@ -82,4 +84,4 @@ class TtlCleanupJob(Job):
 
     @property
     def _involved_couples(self):
-        return []
+        return [str(self.couple)]
