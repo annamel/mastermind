@@ -49,8 +49,12 @@ class TtlCleanupJob(Job):
 
         iter_group_desc = storage.groups[self.iter_group]
         couple = iter_group_desc.couple
-        groups = [g.group_id for g in couple.groups]
-        remotes = [g.node_backends[0].node.host.addr for g in couple.groups]
+        groups = []
+        remotes = []
+        for g in couple.groups:
+            groups.append(g.group_id)
+            node = g.node_backends[0].node
+            remotes.append("{}:{}:{}".format(node.host.addr, node.port,node.family))
 
         # Log, Log_level, temp to be taken from config on infrastructure side
         ttl_cleanup_cmd = infrastructure.ttl_cleanup_cmd(
