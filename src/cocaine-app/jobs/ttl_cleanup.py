@@ -23,7 +23,6 @@ class TtlCleanupJob(Job):
     def __init__(self, **kwargs):
         super(TtlCleanupJob, self).__init__(**kwargs)
         self.type = JobTypes.TYPE_TTL_CLEANUP_JOB
-        self.groups = []
 
     def _set_resources(self):
         self.resources = {
@@ -35,10 +34,6 @@ class TtlCleanupJob(Job):
         if self.iter_group not in storage.groups:
             logger.error("Specified iter group {} has not been found".format(self.iter_group))
             return None
-
-        self.couple = storage.groups[self.iter_group].couple
-        self.groups = [g.group_id for g in self.couple.groups]
-        self.remotes = [g.node_backends[0].node.host.addr for g in self.couple.groups]
 
         # The nodes that are not iterated would be asked to perform remove
         # operation. No data is written. And no data is read.
@@ -52,10 +47,15 @@ class TtlCleanupJob(Job):
             logger.error("Specified iter group {} has not been found".format(self.iter_group))
             return None
 
+        iter_group_desc = storage.groups[self.iter_group]
+        couple = iter_group_desc.couple
+        groups = [g.group_id for g in couple.groups]
+        remotes = [g.node_backends[0].node.host.addr for g in couple.groups]
+
         # Log, Log_level, temp to be taken from config on infrastructure side
         ttl_cleanup_cmd = infrastructure.ttl_cleanup_cmd(
-            remotes=self.remotes,
-            groups=self.groups,
+            remotes=remotes,
+            groups=groups,
             iter_group=self.iter_group,
             wait_timeout=self.wait_timeout,
             batch_size=self.batch_size,
@@ -67,7 +67,7 @@ class TtlCleanupJob(Job):
         logger.debug("TTl cleanup job: Set for execution task %s", ttl_cleanup_cmd)
 
         # Run langolier on the storage node where we are going to iterate
-        nb = storage.groups[self.iter_group].node_backends[0]
+        nb = iter_group_desc.node_backends[0]
         host = nb.node.host.addr
         task = tasks.MinionCmdTask.new(
             self,
@@ -80,8 +80,15 @@ class TtlCleanupJob(Job):
 
     @property
     def _involved_groups(self):
-        return self.groups
+        if self.iter_group not in storage.groups:
+            return []
+
+        couple = storage.groups[self.iter_group].couple
+        return [g.group_id for g in couple.groups]
 
     @property
     def _involved_couples(self):
-        return [str(self.couple)]
+        if self.iter_group not in storage.groups:
+            return []
+
+        return [str(storage.groups[self.iter_group].couple)]
