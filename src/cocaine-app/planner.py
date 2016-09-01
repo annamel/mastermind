@@ -1691,11 +1691,11 @@ class Planner(object):
             job_type=jobs.JobTypes.TYPE_TTL_CLEANUP_JOB,
             params={
                 'iter_group': request['iter_group'],
-                'batch_size': request['batch_size'] if 'batch_size' in request else None,
-                'attempts': request['attempts'] if 'attempts' in request else None,
-                'nproc': request['nproc'] if 'nproc' in request else None,
-                'wait_timeout': request['wait_timeout'] if 'wait_timeout' in request else None,
-                'dry_run': request['dry_run'] if 'dry_run' in request else None,
+                'batch_size': request.get('batch_size'),
+                'attempts': request.get('attempts'),
+                'nproc': request.get('nproc'),
+                'wait_timeout': request.get('wait_timeout'),
+                'dry_run': request.get('dry_run'),
             },
         )
 
