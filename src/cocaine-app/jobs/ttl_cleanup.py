@@ -54,7 +54,7 @@ class TtlCleanupJob(Job):
         for g in couple.groups:
             groups.append(g.group_id)
             node = g.node_backends[0].node
-            remotes.append("{}:{}:{}".format(node.host.addr, node.port,node.family))
+            remotes.append("{}:{}:{}".format(node.host.addr, node.port, node.family))
 
         # Log, Log_level, temp to be taken from config on infrastructure side
         ttl_cleanup_cmd = infrastructure.ttl_cleanup_cmd(
