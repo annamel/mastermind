@@ -6,7 +6,7 @@ from restore_group import RestoreGroupJob
 from make_lrc_groups import MakeLrcGroupsJob
 from add_lrc_groupset import AddLrcGroupsetJob
 from convert_to_lrc_groupset import ConvertToLrcGroupsetJob
-
+from mds_cleanup import MdsCleanupJob
 
 class JobFactory(object):
 
@@ -26,6 +26,8 @@ class JobFactory(object):
             return AddLrcGroupsetJob
         elif job_type == JobTypes.TYPE_CONVERT_TO_LRC_GROUPSET_JOB:
             return ConvertToLrcGroupsetJob
+        elif job_type == JobTypes.TYPE_CLEANUP:
+            return MdsCleanupJob
         raise ValueError('Unknown job type: {}'.format(job_type))
 
     @staticmethod
