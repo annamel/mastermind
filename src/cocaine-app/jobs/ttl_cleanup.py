@@ -31,9 +31,9 @@ class TtlCleanupJob(Job):
             Job.RESOURCE_FS: [],
         }
 
-        if self.iter_group not in storage.groups:
-            logger.error("Specified iter group {} has not been found".format(self.iter_group))
-            return None
+        # Addressing self.iter_group is more or less safe here since
+        # set resources is raised soon after initialization
+        # and on initialization iter_group is validated
 
         # The nodes that are not iterated would be asked to perform remove
         # operation. No data is written. And no data is read.
@@ -42,11 +42,11 @@ class TtlCleanupJob(Job):
         self.resources[Job.RESOURCE_HOST_IN].append(nb.node.host.addr)
         self.resources[Job.RESOURCE_FS].append((nb.node.host.addr, str(nb.fs.fsid)))
 
-    def create_tasks(self):
-        if self.iter_group not in storage.groups:
-            logger.error("Specified iter group {} has not been found".format(self.iter_group))
-            return None
+    def create_tasks(self, processor):
 
+        # Addressing by iter_group may cause an exception of mm was restared
+        # or group disappeared. But it is better to handle exceptions
+        # and manually restart the job then simply ignore undone work
         iter_group_desc = storage.groups[self.iter_group]
         couple = iter_group_desc.couple
         groups = []
@@ -84,15 +84,13 @@ class TtlCleanupJob(Job):
 
     @property
     def _involved_groups(self):
-        if self.iter_group not in storage.groups:
-            return []
-
+        # Addressing by iter_group may cause an exception of mm was restared
+        # or group disappeared. But it is better to handle exceptions
+        # and manually restart the job then simply ignore undone work
         couple = storage.groups[self.iter_group].couple
         return [g.group_id for g in couple.groups]
 
     @property
     def _involved_couples(self):
-        if self.iter_group not in storage.groups:
-            return []
-
+        # Addressing by iter_group may cause an exception. See comment in _involved_groups
         return [str(storage.groups[self.iter_group].couple)]
