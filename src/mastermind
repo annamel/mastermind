@@ -1877,6 +1877,8 @@ def ttl_cleanup(iter_group,
         }
 
     res = s.enqueue('ttl_cleanup', msgpack.packb(params)).get()
+
+    print res
     return
 
 d = Dispatcher(globaloptions=(app_param,))

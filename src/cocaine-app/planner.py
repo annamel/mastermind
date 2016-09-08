@@ -1690,14 +1690,43 @@ class Planner(object):
         if request['iter_group'] not in storage.groups:
             raise ValueError('A valid iter group is expected')
 
+        try:
+            # validate params: they must be either None or numbers
+            batch_size = request.get('batch_size')
+            if batch_size:
+                batch_size = int(batch_size)
+        except ValueError:
+            raise ValueError('Parameter "batch_size" must be a number')
+
+        try:
+            attempts = request.get('attempts')
+            if attempts:
+                attempts = int(attempts)
+        except ValueError:
+            raise ValueError('Parameter "attempts" must be a number')
+
+        try:
+            nproc = request.get('nproc')
+            if nproc:
+                nproc = int(nproc)
+        except ValueError:
+            raise ValueError('Parameter "nproc" must be a number')
+
+        try:
+            wait_timeout = request.get('wait_timeout')
+            if wait_timeout:
+                wait_timeout = int(wait_timeout)
+        except ValueError:
+            raise ValueError('Parameter "wait_timeout" must be a number')
+
         job = self.job_processor._create_job(
             job_type=jobs.JobTypes.TYPE_TTL_CLEANUP_JOB,
             params={
                 'iter_group': request['iter_group'],
-                'batch_size': request.get('batch_size'),
-                'attempts': request.get('attempts'),
-                'nproc': request.get('nproc'),
-                'wait_timeout': request.get('wait_timeout'),
+                'batch_size': batch_size,
+                'attempts': attempts,
+                'nproc': nproc,
+                'wait_timeout': wait_timeout,
                 'dry_run': request.get('dry_run'),
             },
         )
