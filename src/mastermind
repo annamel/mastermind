@@ -1853,7 +1853,7 @@ def lrc_groupset_convert(groupset=('g',
 cleanupDispatcher = Dispatcher(globaloptions=(host_param, app_param))
 @cleanupDispatcher.command(name='run')
 @log_action
-def mds_cleanup(iter_group, 
+def ttl_cleanup(iter_group, 
                 batch_size=('b', '', 'The batch size (a number of records to be removed simultaneously)'),
                 attempts=('a', '', 'The retry count'),
                 nproc=('n', '', 'A number of threads in session'),
@@ -1876,7 +1876,7 @@ def mds_cleanup(iter_group,
         'dry_run': dry_run
         }
 
-    res = s.enqueue('cleanup', msgpack.packb(params)).get()
+    res = s.enqueue('ttl_cleanup', msgpack.packb(params)).get()
     return
 
 d = Dispatcher(globaloptions=(app_param,))
@@ -1888,7 +1888,7 @@ d.nest('job', jobDispatcher, 'Perform jobs action')
 d.nest('lock', lockDispatcher, 'Acquire locks on storage infrastructure nodes')
 d.nest('unlock', unlockDispatcher, 'Release locks on storage infrastructure nodes')
 d.nest('lrc', lrcDispatcher, 'Perform actions with LRC groups or couples')
-d.nest('cleanup', cleanupDispatcher, 'Remove elliptics legacy records')
+d.nest('ttl_cleanup', cleanupDispatcher, 'Remove elliptics expired records')
 
 def command_helper(argv):
     cmdtable = d.cmdtable

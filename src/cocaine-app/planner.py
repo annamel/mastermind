@@ -1676,7 +1676,7 @@ class Planner(object):
 
         return job.dump()
 
-    def cleanup(self, request):
+    def ttl_cleanup(self, request):
         """
         TTL cleanup job. Remove all records with expired TTL
         """
@@ -1686,6 +1686,9 @@ class Planner(object):
         # with completely unexpected and unpredicted arguments
         if 'iter_group' not in request:
             raise ValueError('Request should contain iter_group field')
+
+        if request['iter_group'] not in storage.groups:
+            raise ValueError('A valid iter group is expected')
 
         job = self.job_processor._create_job(
             job_type=jobs.JobTypes.TYPE_TTL_CLEANUP_JOB,
