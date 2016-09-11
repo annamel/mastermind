@@ -1849,9 +1849,8 @@ def lrc_groupset_convert(groupset=('g',
 
     return
 
-# TTL cleanup commands
-cleanupDispatcher = Dispatcher(globaloptions=(host_param, app_param))
-@cleanupDispatcher.command(name='run')
+
+@coupleDispatcher.command(name='ttl_cleanup')
 @log_action
 def ttl_cleanup(iter_group, 
                 batch_size=('b', '', 'The batch size (a number of records to be removed simultaneously)'),
@@ -1861,7 +1860,7 @@ def ttl_cleanup(iter_group,
                 dry_run=('d', False, 'Dry-run mode'),
                 host=None, app=None):
     '''
-    Run mds cleanup command from langolier package. Remove records with TTL expired
+    Remove records with TTL expired
     '''
     s = service(host, app)
 
@@ -1890,7 +1889,6 @@ d.nest('job', jobDispatcher, 'Perform jobs action')
 d.nest('lock', lockDispatcher, 'Acquire locks on storage infrastructure nodes')
 d.nest('unlock', unlockDispatcher, 'Release locks on storage infrastructure nodes')
 d.nest('lrc', lrcDispatcher, 'Perform actions with LRC groups or couples')
-d.nest('ttl_cleanup', cleanupDispatcher, 'Remove elliptics expired records')
 
 def command_helper(argv):
     cmdtable = d.cmdtable
