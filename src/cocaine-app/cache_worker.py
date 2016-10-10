@@ -35,6 +35,7 @@ import jobs
 import couple_records
 import node_info_updater
 import helpers as h
+from namespaces import NamespacesSettings
 
 
 def init_elliptics_node():
@@ -136,7 +137,7 @@ def init_infrastructure(W, n, namespaces_settings):
     return infstruct
 
 
-def init_cache_worker(W, n, niu, j, meta_db):
+def init_cache_worker(W, n, niu, j, meta_db, namespaces_settings):
     if not config.get("cache"):
         logger.error('Cache is not set up in config ("cache" key), '
                      'will not be initialized')
@@ -145,7 +146,7 @@ def init_cache_worker(W, n, niu, j, meta_db):
         logger.error('Cache metadata db is not set up ("metadata.cache.db" key), '
                      'will not be initialized')
         return None
-    c = cache.CacheManager(n, niu, j, meta_db)
+    c = cache.CacheManager(n, niu, j, meta_db, namespaces_settings)
     h.register_handle(W, c.get_top_keys)
     h.register_handle(W, c.cache_statistics)
     h.register_handle(W, c.cache_clean)
@@ -213,7 +214,7 @@ if __name__ == '__main__':
     jf = init_job_finder(meta_db)
     j = init_job_processor(jf, meta_db, niu)
 
-    c = init_cache_worker(W, n, niu, j, meta_db)
+    c = init_cache_worker(W, n, niu, j, meta_db, namespaces_settings)
 
     icm._start_tq()
     c and c._start_tq()
