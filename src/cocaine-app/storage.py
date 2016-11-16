@@ -18,11 +18,11 @@ import jobs.job
 from jobs.job_types import JobTypes
 from infrastructure import infrastructure
 from infrastructure_cache import cache
-from config import config
 import lrc_builder
 from mastermind.query.couples import Couple as CoupleInfo
 from mastermind.query.groupsets import Groupset as GroupsetInfo
 from mastermind.query.groups import Group as GroupInfo
+from mastermind_core.config import config
 
 logger = logging.getLogger('mm.storage')
 
@@ -1035,7 +1035,7 @@ class Host(object):
         return self.__str__()
 
     def __eq__(self, other):
-        if isinstance(other, str):
+        if isinstance(other, basestring):
             return self.addr == other
 
         if isinstance(other, Host):
@@ -1559,10 +1559,6 @@ class Group(object):
             return self.meta.get('type', self.TYPE_DATA)
 
         else:
-
-            if self._type != Group.TYPE_UNKNOWN:
-                # when meta is None keep current type if set
-                return self._type
 
             if self.couple:
                 return Group.TYPE_DATA
@@ -2258,7 +2254,7 @@ class Groupset(object):
         if isinstance(other, (str, unicode)):
             return self.__str__() == other
 
-        if isinstance(other, Couple):
+        if isinstance(other, Groupset):
             return self.groups == other.groups
 
     def __repr__(self):

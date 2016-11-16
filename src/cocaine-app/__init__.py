@@ -30,19 +30,20 @@ logger = logging.getLogger('mm.init')
 # TODO: remove this dependency
 import storage
 import balancer
-from db.mongo.pool import MongoReplicaSetClient
 import external_storage
 import helpers
 import history
 import infrastructure
 import jobs
 import couple_records
-import minions
+import minions_monitor
 import node_info_updater
 from planner import Planner
-from config import config
+from planner.move_planner import MovePlanner
 from manual_locks import manual_locker
 from namespaces import NamespacesSettings
+from mastermind_core.config import config
+from mastermind_core.meta_db import meta_db
 
 
 i = iter(xrange(100))
@@ -99,46 +100,10 @@ except Exception as e:
     raise ValueError('Failed to connect to any elliptics storage node')
 
 logger.info("trace %d" % (i.next()))
-meta_node = elliptics.Node(log, node_config)
-
-addresses = []
-for node in config["metadata"]["nodes"]:
-    try:
-        addresses.append(elliptics.Address(
-            host=str(node[0]), port=node[1], family=node[2]))
-    except Exception as e:
-        logger.error('Failed to connect to meta node: {0}:{1}:{2}'.format(
-            node[0], node[1], node[2]))
-        pass
-
-logger.info('Connecting to meta nodes: {0}'.format(config["metadata"]["nodes"]))
-
-try:
-    meta_node.add_remotes(addresses)
-except Exception as e:
-    logger.error('Failed to connect to any elliptics meta storage node: {0}'.format(
-        e))
-    raise ValueError('Failed to connect to any elliptics storage META node')
-
 
 wait_timeout = config.get('wait_timeout', 5)
 logger.info('sleeping for wait_timeout for nodes to collect data ({0} sec)'.format(wait_timeout))
 sleep(wait_timeout)
-
-meta_wait_timeout = config['metadata'].get('wait_timeout', 5)
-
-meta_session = elliptics.Session(meta_node)
-meta_session.set_timeout(meta_wait_timeout)
-meta_session.add_groups(list(config["metadata"]["groups"]))
-logger.info("trace %d" % (i.next()))
-n.meta_session = meta_session
-
-mrsc_options = config['metadata'].get('options', {})
-
-meta_db = None
-if config['metadata'].get('url'):
-    meta_db = MongoReplicaSetClient(config['metadata']['url'], **mrsc_options)
-
 
 logger.info("trace %d" % (i.next()))
 logger.info("before creating worker")
@@ -239,22 +204,29 @@ def init_statistics():
 
 
 def init_minions():
-    m = minions.Minions(n)
+    m = minions_monitor.MinionsMonitor(meta_db)
     register_handle(m.get_command)
-    register_handle(m.get_commands)
     register_handle(m.execute_cmd)
     register_handle(m.terminate_cmd)
     return m
 
 
-def init_planner(job_processor, niu, namespaces_settings):
-    planner = Planner(n.meta_session, meta_db, niu, job_processor, namespaces_settings)
+def init_planner(job_processor, niu, namespaces_settings, move_planner):
+    planner = Planner(meta_db, niu, job_processor, namespaces_settings)
     register_handle(planner.restore_group)
     register_handle(planner.move_group)
     register_handle(planner.move_groups_from_host)
     register_handle(planner.convert_external_storage_to_groupset)
     register_handle(planner.restore_groups_from_path)
     register_handle(planner.ttl_cleanup)
+
+    planner.add_planner(move_planner)
+
+    return planner
+
+
+def init_move_planner(job_processor, niu, namespaces_settings):
+    planner = MovePlanner(meta_db, niu, job_processor, namespaces_settings)
     return planner
 
 
@@ -278,6 +250,7 @@ def init_external_storage_meta():
             'External storage metadb is not set up '
             '("metadata.external_storage.db" key), will not be initialized'
         )
+        return None
     external_storage_meta = external_storage.ExternalStorageMeta(meta_db)
     register_handle(external_storage_meta.get_external_storage_mapping)
     return external_storage_meta
@@ -306,7 +279,7 @@ def init_group_history_finder():
     return ghf
 
 
-def init_job_processor(jf, minions, niu, external_storage_meta, couple_record_finder):
+def init_job_processor(jf, minions_monitor, niu, external_storage_meta, couple_record_finder):
     if jf is None:
         logger.error(
             'Job processor will not be initialized because '
@@ -318,7 +291,7 @@ def init_job_processor(jf, minions, niu, external_storage_meta, couple_record_fi
         n,
         meta_db,
         niu,
-        minions,
+        minions_monitor,
         external_storage_meta=external_storage_meta,
         couple_record_finder=couple_record_finder,
     )
@@ -353,7 +326,8 @@ init_statistics()
 m = init_minions()
 j = init_job_processor(jf, m, niu, external_storage_meta, crf)
 if j:
-    po = init_planner(j, niu, namespaces_settings)
+    move_planner = init_move_planner(j, niu, namespaces_settings)
+    po = init_planner(j, niu, namespaces_settings, move_planner)
     j.planner = po
 else:
     po = None

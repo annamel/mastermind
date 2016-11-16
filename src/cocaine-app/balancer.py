@@ -7,20 +7,19 @@ import logging
 import operator
 import re
 import time
-import traceback
 
 import elliptics
 import msgpack
 # from mastermind.service import ReconnectableService
 from tornado.ioloop import IOLoop
 
-from config import config
-from db.mongo.pool import Collection
 import helpers as h
 import infrastructure
 import inventory
 import jobs.job
 import keys
+from mastermind_core.config import config
+from mastermind_core.db.mongo.pool import Collection
 from mastermind_core.response import CachedGzipResponse
 from mastermind_core.helpers import gzip_compress
 import monitor
@@ -1157,7 +1156,7 @@ class Balancer(object):
             if confirm not in correct_confirms:
                 raise Exception('Incorrect confirmation string')
 
-            kill_symm_group(self.node, self.node.meta_session, couple)
+            kill_symm_group(self.node, couple)
             # force cleaning meta from groups when destroying groupset (otherwise
             # will have to wait for the next cluster update cycle)
             for group in couple.groups:
@@ -1222,7 +1221,7 @@ class Balancer(object):
                 if g not in groups:
                     raise ValueError(
                         'Using incomplete couple {}, full couple is {}'.format(
-                            couple,
+                            groups,
                             ref_couple
                         )
                     )
@@ -1291,9 +1290,8 @@ class Balancer(object):
 
         cur_settings.update(settings)
 
-        self._validate_static_couple(cur_settings)
-
         if not options.get('skip_validation'):
+            self._validate_static_couple(cur_settings)
             cur_settings.validate()
 
         cur_settings.save()
@@ -1471,6 +1469,8 @@ class Balancer(object):
     def storage_keys_diff(self, request):
         couples_diff = {}
         for couple in storage.replicas_groupsets:
+            if couple.status == storage.Status.BROKEN:
+                continue
             group_keys = []
             for group in couple.groups:
                 if not len(group.node_backends):
@@ -1644,7 +1644,7 @@ def consistent_write(session, key, data, retries=3, rollback_on_error=True):
         )
 
 
-def kill_symm_group(n, meta_session, couple):
+def kill_symm_group(n, couple):
     groups = [group.group_id for group in couple]
     logger.info('Killing symm groups: %s' % str(groups))
     s = elliptics.Session(n)

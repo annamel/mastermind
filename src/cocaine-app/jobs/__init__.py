@@ -6,14 +6,14 @@ import traceback
 
 import elliptics
 
-from config import config
-from db.mongo.pool import Collection
 from error import JobBrokenError, RetryError
 import helpers as h
 from job_types import JobTypes, TaskTypes
 from job import Job
 from couple_defrag import CoupleDefragJob
 import lrc_builder
+from mastermind_core.config import config
+from mastermind_core.db.mongo.pool import Collection
 from move import MoveJob
 from recover_dc import RecoverDcJob
 from make_lrc_groups import MakeLrcGroupsJob
@@ -77,31 +77,38 @@ class JobProcessor(object):
         JobTypes.TYPE_BACKEND_MANAGER_JOB,
     ])
 
-    def __init__(self, job_finder, node, db, niu, minions, external_storage_meta, couple_record_finder):
+    def __init__(self, job_finder, node, db, niu, minions_monitor, external_storage_meta, couple_record_finder):
         logger.info('Starting JobProcessor')
         self.job_finder = job_finder
         self.session = elliptics.Session(node)
         wait_timeout = config.get('elliptics', {}).get('wait_timeout') or \
             config.get('wait_timeout', 5)
         self.session.set_timeout(wait_timeout)
-        self.meta_session = node.meta_session
-        self.minions = minions
+        self.minions_monitor = minions_monitor
         self.node_info_updater = niu
         self.planner = None
         self.external_storage_meta = external_storage_meta
         self.couple_record_finder = couple_record_finder
 
-        self.__tq = timed_queue.TimedQueue()
+        self.__tq = None
 
         self.jobs_timer = periodic_timer(seconds=JOB_CONFIG.get('execute_period', 60))
         self.downtimes = Collection(db[config['metadata']['jobs']['db']], 'downtimes')
-        self.__tq.add_task_at(
-            self.JOBS_EXECUTE,
-            self.jobs_timer.next(),
-            self._execute_jobs)
+
+        if config.get('jobs', {}).get('enabled', True):
+            self.__tq = timed_queue.TimedQueue()
+            self.__tq.add_task_at(
+                task_id=self.JOBS_EXECUTE,
+                at=self.jobs_timer.next(),
+                function=self._execute_jobs,
+            )
+        else:
+            logger.warn("Job processor is disabled (config option ['jobs']['enabled'])")
+            pass
 
     def _start_tq(self):
-        self.__tq.start()
+        if self.__tq:
+            self.__tq.start()
 
     @staticmethod
     def _unfold_resources(d):
@@ -162,48 +169,45 @@ class JobProcessor(object):
         # selecting jobs to start processing
         for job in new_jobs:
 
-            check_types = [t for t, p in self.JOB_PRIORITIES.iteritems()
-                           if p > self.JOB_PRIORITIES[job.type]]
-            logger.debug('Job {}: checking higher priority job types: {}'.format(
-                job.id, check_types))
+            check_types = [
+                t
+                for t, p in self.JOB_PRIORITIES.iteritems()
+                if p >= self.JOB_PRIORITIES[job.type]
+            ]
+            logger.debug(
+                'Job {}: checking job type resources according to priorities: {}'.format(
+                    job.id,
+                    check_types
+                )
+            )
 
             no_slots = False
 
             for res_type, res_val in self._unfold_resources(job.resources):
 
-                for job_type in check_types:
-                    if resources[job_type][res_type].get(res_val, 0) > 0:
-                        # job of higher priority is using the resource
-                        logger.debug(
-                            'Job {}: will be skipped, resource {} / {} '
-                            'is occupuied by higher priority job of type {}'.format(
-                                job.id, res_type, res_val, job_type))
-                        no_slots = True
-                        break
+                max_res_limit = JOB_CONFIG.get(job.type, {}).get('resources_limits', {}).get(
+                    res_type, float('inf')
+                )
 
-                if no_slots:
-                    break
+                used_res_count = sum(
+                    resources[job_type][res_type].get(res_val, 0)
+                    for job_type in check_types
+                )
 
-                cur_usage = resources[job.type][res_type].get(res_val, 0)
-                max_usage = JOB_CONFIG.get(job.type, {}).get(
-                    'resources_limits', {}).get(res_type, float('inf'))
-                if cur_usage >= max_usage:
+                if used_res_count >= max_res_limit:
+                    # job of higher or same priority is using the resource
                     logger.debug(
-                        'Job {job_id}: will be skipped, resource '
-                        '{used_resource_type} / {used_resource} '
-                        'counter {used_resource_counter} >= {used_resource_max} '
-                        'is occupied by jobs of same or less priority'.format(
+                        'Job {job_id}: will be skipped, resource {res_type} / {res_val} is '
+                        'occupuied by higher or same priority jobs (used {used_res_count} >= '
+                        '{max_res_limit})'.format(
                             job_id=job.id,
-                            used_resource_type=res_type,
-                            used_resource=res_val,
-                            used_resource_counter=cur_usage,
-                            used_resource_max=max_usage,
+                            res_type=res_type,
+                            res_val=res_val,
+                            used_res_count=used_res_count,
+                            max_res_limit=max_res_limit,
                         )
                     )
-
                     no_slots = True
-
-                if no_slots:
                     break
 
             if no_slots:
@@ -605,7 +609,7 @@ class JobProcessor(object):
                     # Move task stop handling to task itself?
                     if isinstance(task, MinionCmdTask):
                         try:
-                            self.minions._terminate_cmd(task.host, task.minion_cmd_id)
+                            self.minions_monitor._terminate_cmd(task.host, task.minion_cmd_id)
                         except Exception as e:
                             logger.error('Job {0}, task {1}: failed to stop '
                                 'minion task: {2}\n{3}'.format(
@@ -952,16 +956,22 @@ class JobFinder(object):
         except (TypeError, IndexError):
             options = {}
 
-        jobs_list = Job.list(self.collection,
-            status=options['statuses'],
-            type=options['job_type'])
+        statuses = options.get('statuses', None)
+        job_type = options.get('job_type', None)
+        groups = options.get('groups', None)
+        limit = options.get('limit', None)
+        offset = int(options.get('offset', 0))
+
+        jobs_list = Job.list(
+            self.collection,
+            status=statuses,
+            type=job_type,
+            group=groups,
+        )
         total_jobs = jobs_list.count()
 
-        if options.get('limit'):
-            limit = int(options['limit'])
-            offset = int(options.get('offset', 0))
-
-            jobs_list = jobs_list[offset:offset + limit]
+        if limit is not None:
+            jobs_list = jobs_list[offset:offset + int(limit)]
 
         res = []
         for j in jobs_list:
@@ -1001,10 +1011,13 @@ class JobFinder(object):
         job.collection = self.collection
         return job
 
-    def jobs_count(self, types=None, statuses=None):
-        return Job.list(self.collection,
+    def jobs_count(self, types=None, statuses=None, **kwargs):
+        return Job.list(
+            self.collection,
             status=statuses,
-            type=types).count()
+            type=types,
+            **kwargs
+        ).count()
 
     def jobs(self, types=None, statuses=None, ids=None, groups=None):
         jobs = []

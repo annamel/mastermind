@@ -827,6 +827,106 @@ def job_status(job_id,
         pprint(res)
 
 
+@jobDispatcher.command(name='cancel')
+@log_action
+def job_cancel(job_id,
+               json=('', None, 'Format data as json'),
+               host=None, app=None):
+    '''Cancel job'''
+    s = service(host, app)
+    res = s.enqueue('cancel_job', msgpack.packb([job_id])).get()
+    if json:
+        print dumps(res)
+    else:
+        pprint(res)
+
+
+@jobDispatcher.command(name='stop')
+@log_action
+def job_stop(job_id,
+             json=('', None, 'Format data as json'),
+             host=None, app=None):
+    '''Stop job'''
+    s = service(host, app)
+    res = s.enqueue('stop_jobs', msgpack.packb([[job_id]])).get()
+    if json:
+        print dumps(res)
+    else:
+        pprint(res)
+
+
+@jobDispatcher.command(name='approve')
+@log_action
+def job_approve(job_id,
+                json=('', None, 'Format data as json'),
+                host=None, app=None):
+    '''Approve job'''
+    s = service(host, app)
+    res = s.enqueue('approve_job', msgpack.packb([job_id])).get()
+    if json:
+        print dumps(res)
+    else:
+        pprint(res)
+
+
+@jobDispatcher.command(name='retry_task')
+@log_action
+def job_retry_task(job_id, task_id,
+                   json=('', None, 'Format data as json'),
+                   host=None, app=None):
+    '''Retry failed job task'''
+    s = service(host, app)
+    res = s.enqueue('retry_failed_job_task', msgpack.packb([job_id, task_id])).get()
+    if json:
+        print dumps(res)
+    else:
+        pprint(res)
+
+
+@jobDispatcher.command(name='skip_task')
+@log_action
+def job_skip_task(job_id, task_id,
+                  json=('', None, 'Format data as json'),
+                  host=None, app=None):
+    '''Skip failed job task'''
+    s = service(host, app)
+    res = s.enqueue('skip_failed_job_task', msgpack.packb([job_id, task_id])).get()
+    if json:
+        print dumps(res)
+    else:
+        pprint(res)
+
+
+@jobDispatcher.command(name='list')
+@log_action
+def job_list(statuses=('s', 'not_approved', 'Filtering jobs by statuses '
+                       '(comma-separated values can be used, i.e. "pending,broken")'),
+             job_type=('t', '', 'Filtering jobs by types '
+                       '(comma-separated values can be used, i.e. "move_job,restore_group_job")'),
+             groups=('g', '', 'Filtering jobs by groups'
+                     '(comma-separated values can be used, i.e. "move_job,restore_group_job")'),
+             limit=('l', '', 'Jobs limit'),
+             offset=('o', '', 'Jobs offset'),
+             json=('', None, 'Format data as json'),
+             short=('', False, 'Use short format output'),
+             host=None, app=None):
+    '''Get jobs list'''
+    s = service(host, app)
+    params = {}
+    params['statuses'] = statuses.split(',') if statuses else None
+    params['job_type'] = job_type.split(',') if job_type else None
+    params['groups'] = groups.split(',') if groups else None
+    params['limit'] = limit if limit else None
+    params['offset'] = offset if offset else 0
+    res = s.enqueue('get_job_list', msgpack.packb([params])).get()
+    if short:
+        res['jobs'] = [job['id'] for job in res['jobs']]
+    if json:
+        print dumps(res)
+    else:
+        pprint(res)
+
+
 @jobDispatcher.command(name='move-groups')
 @log_action
 def job_move_groups(src_host,
@@ -973,6 +1073,19 @@ def ns_setup(namespace,
                  "positive integer value with one of the following postfixes: "
                  "s - seconds; m - minutes; h - hours; d - days. Examples: 7200s, 2h"
              ),
+             attributes_symlink=(
+                 '',
+                 '',
+                 "This flag toggles the client's ability to use keys in symlink mode (key's data "
+                 "contains url to another key in the symlink scope). To allow symlink mode set "
+                 "this flag to 1, to disable set it to 0. "
+             ),
+             attributes_symlink_scope_limit=(
+                 '',
+                 '',
+                 'Scope limit for symlink, available values: "namespace" - symlink can be a '
+                 'relative url to the same namespace\'s keys;'
+             ),
              json=('', None, 'Format output as json'),
              host=None, app=None):
 
@@ -995,32 +1108,59 @@ def ns_setup(namespace,
 
     if new:
         params = dict(
-            groups_count=groups_count,
+            # TODO: groups_count should not be a string
+            groups_count=(
+                int(groups_count)
+                if groups_count else
+                None
+            ),
             static_couple=couple,
             success_copies=success_copies,
             auth_key_write=new_auth_key_write,
             auth_key_read=new_auth_key_read,
             sign_token=sign_token,
             sign_path_prefix=sign_path_prefix,
-            min_units=min_units,
-            add_units=add_units,
-            redirect_content_length_threshold=redirect_content_length_threshold,
-            redirect_expire_time=redirect_expire_time,
+            # TODO: min_units should not be a string
+            min_units=int(min_units) if min_units else None,
+            # TODO: add_units should not be a string
+            add_units=int(add_units) if add_units else None,
+            # TODO: redirect_content_length_threshold should not be a string
+            redirect_content_length_threshold=(
+                int(redirect_content_length_threshold)
+                if redirect_content_length_threshold else
+                None
+            ),
+            # TODO: redirect_expire_time should not be a string
+            redirect_expire_time=int(redirect_expire_time) if redirect_expire_time else None,
             redirect_query_args=redirect_query_args,
             redirect_add_orig_path_query_arg=redirect_add_orig_path_query_arg,
-            multipart_content_length_threshold=multipart_content_length_threshold,
+            # TODO: multipart_content_length_threshold should not be a string
+            multipart_content_length_threshold=(
+                int(multipart_content_length_threshold)
+                if multipart_content_length_threshold else
+                None
+            ),
             select_couple_to_upload=select_couple_to_upload,
-            reserved_space_percentage=float(reserved_space_percentage or 0.0),
+            reserved_space_percentage=(
+                float(reserved_space_percentage)
+                if reserved_space_percentage else
+                None
+            ),
             check_for_update=check_for_update,
-            custom_expiration_time=custom_expiration_time,
+            custom_expiration_time=custom_expiration_time == '1',
             attributes_filename=attributes_filename == '1',
             attributes_ttl_minimum=attributes_ttl_minimum,
             attributes_ttl_maximum=attributes_ttl_maximum,
+            attributes_symlink_scope_limit=attributes_symlink_scope_limit,
         )
 
         # attributes_ttl should not be passed if not set so that default value stays None
         if attributes_ttl:
             params['attributes_ttl'] = attributes_ttl == '1'
+
+        # symlink should not be passed if not set so that default value stays None
+        if attributes_symlink:
+            params['attributes_symlink'] = attributes_symlink == '1'
 
         ns = cl.namespaces.setup(
             namespace,
@@ -1072,9 +1212,9 @@ def ns_setup(namespace,
             settings['auth-keys'].setdefault('write', '')
 
         if min_units:
-            settings['min-units'] = min_units
+            settings['min-units'] = int(min_units)
         if add_units:
-            settings['add-units'] = add_units
+            settings['add-units'] = int(add_units)
         if reserved_space_percentage:
             settings['reserved-space-percentage'] = float(reserved_space_percentage)
 
@@ -1121,6 +1261,15 @@ def ns_setup(namespace,
 
         if ttl_attributes:
             attributes['ttl'] = ttl_attributes
+
+        symlink_attributes = {}
+        if attributes_symlink:
+            symlink_attributes['enable'] = attributes_symlink == '1'
+        if attributes_symlink_scope_limit:
+            symlink_attributes['scope-limit'] = attributes_symlink_scope_limit
+
+        if symlink_attributes:
+            attributes['symlink'] = symlink_attributes
 
         if attributes:
             settings['attributes'] = attributes

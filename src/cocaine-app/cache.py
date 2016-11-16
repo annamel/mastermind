@@ -11,13 +11,13 @@ import pymongo
 
 import balancer
 from cache_transport import cache_task_manager
-from config import config
-from db.mongo.pool import Collection
 import helpers as h
 import inventory
 from infrastructure import infrastructure
 import jobs
 import keys
+from mastermind_core.config import config
+from mastermind_core.db.mongo.pool import Collection
 import storage
 from sync import sync_manager
 from sync.error import LockError, LockFailedError
@@ -496,7 +496,8 @@ class CacheManager(object):
 
             self._mark_cache_groups()
 
-            self.niu.update_symm_groups_async(namespaces_settings=self.namespaces_settings)
+            namespaces_settings = self.namespaces_settings.fetch()
+            self.niu.update_symm_groups_async(namespaces_settings=namespaces_settings)
 
             logger.info('Detected cache groups: {0}'.format(
                 len(storage.cache_couples)))
