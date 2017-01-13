@@ -76,6 +76,19 @@ GROUP BY
         WHERE  sum_expired_size >= {trigger};
     """
 
+    REPLACE_QUERY = """
+INSERT INTO [{tmp_table}]
+SELECT * FROM [{base_table}]
+WHERE timestamp < {starting_time};
+COMMIT;
+DROP TABLE [{base_table}];
+COMMIT;
+INSERT INTO [{base_table}]
+SELECT * FROM [{tmp_table}];
+COMMIT;
+DROP TABLE [{tmp_table}];
+    """
+
     def __init__(self, cluster, token, attempts, delay):
         self._cluster = cluster
         self._token = token
@@ -213,3 +226,78 @@ GROUP BY
                                                timestamp=int(time.time()), date_iso=date_iso)
 
         return self.send_request(query)
+
+    def cleanup_aggregaton_table(self, aggregate_table, couples_hist):
+        """
+        Aggregation table is to be cleaned up from time to time in order to speed up aggregate_query
+        We could remove records that have expiration_date less then the last ttl_cleanup run on this couple
+        But since there is no REMOVE request in YQL (YQL-1747) we need to create a new table without outdated records
+        :param aggregate_table: a name of aggregation table
+        :param couples_hist: dict[ 'couple_id' ] = last_run
+        :exception IOError (from YQL operations), ValueError
+        """
+
+        tmp_table_name = aggregate_table + "_tmp"
+
+        # Read the entire table content
+        query = "SELECT * FROM [{}];".format(aggregate_table)
+        r = self.send_request(query)
+
+        records_to_remove = 0
+
+        for table in r.results:  # access to results blocks until they are ready
+            table.fetch_full_data()
+
+            ins_query = "INSERT INTO [" + tmp_table_name + "] (" + ", ".join(cln[0] for cln in table.columns) + ") VALUES "
+
+            couple_repr = ('couple_id', 'String')
+            exp_repr = ('expiration_date', 'Uint64')
+
+            if couple_repr not in table.columns or exp_repr not in table.columns:
+                raise ValueError("Incorrect table columns {}".format(table.columns))
+            couple_idx = table.columns.index(couple_repr)
+            exp_idx = table.columns.index(exp_repr)
+
+            # do not create a new dict for the sake of memory. do not modify table.row for the sake of performance
+            # instead create insertion request just in place
+            for row in table.rows:
+                couple_id = int(row[couple_idx])
+                expiration = int(row[exp_idx])
+
+                if couple_id not in couples_hist:
+                    logger.error("couple {} not in couples_hist {}".format(couple_id, couples_hist))
+                    continue
+
+                if couples_hist[couple_id] < expiration:
+                    continue
+
+                converting_func = lambda r, i: "CAST({} AS {})".format(r, table.columns[i][1]) \
+                    if table.columns[i][1] != "String" else ("'" + str(r) + "'")
+
+                ins_query += "(" + ", ".join(converting_func(r, row.index(r)) for r in row) + "),"
+                records_to_remove += 1
+
+            ins_query = ins_query[:-1] + ";"
+
+        if records_to_remove == 0:
+            # no need to except: maybe cleanup of aggregation table run frequently due to test reasons
+            # but anyway we'd better to notify of that
+            logger.error("No outdated records in agg_table were found, couples_hist len = {}".format(len(couples_hist)))
+            return
+
+        # We can drop old aggregation table and insert the new one at once (one request is protected by trans lock)
+        # But delivering values from outside could take much longer then transferring values from one table into another
+        # So it's preferrable to prepare a temp table before
+        self.send_request(ins_query)
+
+        # We need to perform the following sequence:
+        #  - drop old aggregation table
+        #  - transfer data from tmp table into aggregation
+        #  - drop tmp table
+        # All those actions should be performed within one YQL operation to guarantee lock for the table.
+        # But in the beginning we should get update from aggregation table
+        # (i.e. values that were recorded during our processing and thus that are absent in tmp_table)
+        replace_query = self.REPLACE_QUERY.format(
+            starting_time=time.time(), tmp_table=tmp_table_name, base_table=aggregate_table)
+
+        self.send_request(replace_query)

@@ -23,6 +23,7 @@ from timer import periodic_timer
 import os
 import re
 from history import GroupHistoryFinder
+from yt_worker import YqlWrapper
 
 import timed_queue
 
@@ -35,6 +36,7 @@ class Planner(object):
     RECOVER_DC = 'recover_dc'
     COUPLE_DEFRAG = 'couple_defrag'
     TTL_CLEANUP = 'ttl_cleanup'
+    TTL_YT_CLEANUP = 'ttl_yt_cleanup'
 
     RECOVERY_OP_CHUNK = 200
 
@@ -63,6 +65,9 @@ class Planner(object):
                 'couple_defrag_period', 60 * 15))
         self.ttl_cleanup_timer = periodic_timer(
             seconds=self.params.get('ttl_cleanup', {}).get('ttl_cleanup_period', 60 * 15))
+        self.ttl_cleanup_yt_timer = periodic_timer(
+            seconds=self.params.get('ttl_cleanup', {}).get('yt_cleanup_period', 60 * 60 * 24 * 10)
+        )
 
         if config['metadata'].get('planner', {}).get('db'):
             self.collection = Collection(db[config['metadata']['planner']['db']], 'planner')
@@ -88,6 +93,15 @@ class Planner(object):
                     self._ttl_cleanup_planner
                 )
 
+                # Running ttl_yt_cleaner should happen under the same lock as TTL_CLEANUP in order to
+                # decrease concurrent access to YT cleanup
+                self.__tq.add_task_at(
+                    self.TTL_YT_CLEANUP,
+                    self.ttl_cleanup_yt_timer.next(),
+                    self._ttl_yt_cleaner
+                )
+
+
     def _start_tq(self):
         self.__tq.start()
 
@@ -106,7 +120,6 @@ class Planner(object):
             yt_attempts = self.params.get('ttl_cleanup', {}).get('yt_attempts', 3)
             yt_delay = self.params.get('ttl_cleanup', {}).get('yt_delay', 10)
 
-            from yt_worker import YqlWrapper
             yt_wrapper = YqlWrapper(cluster=yt_cluster, token=yt_token, attempts=yt_attempts, delay=yt_delay)
 
             aggregation_table = self.params.get('ttl_cleanup', {}).get('aggregation_table', "")
@@ -175,6 +188,93 @@ class Planner(object):
 
         logger.debug("Find lazy couples {}".format(idle_groups))
         return idle_groups
+
+    def _get_ttl_cleanup_last_run(self):
+        """
+        Iterates over collection and extracts only couples within namespaces with enabled ttl
+        :return: dict ['couple_id'] = last_ttl_run_time
+        """
+        result = {}
+
+        couples_data = self.collection.find().sort('cleanup_ts', pymongo.ASCENDING)
+        if couples_data.count() < len(storage.replicas_groupsets):
+            logger.info('Sync cleanup data is required: {0} records/{1} couples'.format(
+                couples_data.count(), len(storage.replicas_groupsets)))
+            self.sync_historic_data(recover_ts=0, cleanup_ts=int(time.time()))
+            couples_data = self.collection.find().sort('cleanup_ts', pymongo.ASCENDING)
+
+        for couple_data in couples_data:
+            c = couple_data['couple']
+
+            if c == "None":
+                logger.error("Damaged couple? {}".format(couple_data))
+                continue
+
+            group_id = int(c.split(":")[0])
+
+            if group_id not in storage.groups:
+                logger.error("Not valid group is within collection {}".format(group_id))
+                continue
+            group = storage.groups[group_id]
+            if not group.couple:
+                logger.error("Group in collection is uncoupled {}".format(str(group)))
+                continue
+
+            ns_settings = self.namespaces_settings.get(group.couple.namespace.id)
+            if ns_settings and not ns_settings.attributes.ttl.enable:
+                logger.debug("Skipping group {} cause ns '{}' no ttl".format(group_id, group.couple.namespace.id))
+                continue
+
+            # if couple_data doesn't contain cleanup_ts field then cleanup_ts has never been run on this couple
+            # and None < idleness_threshold
+            result[group_id] = couple_data.get('cleanup_ts')
+
+        logger.info("History of last run is of {} len".format(len(result)))
+        return result
+
+    def _cleanup_aggregation_yt(self):
+        """
+        Cleanup YT aggregation table by removing outdated records (where outdated means their exp_date < ttl_last_run)
+        :return:
+        """
+
+        logger.info("Going to cleanup aggregation YT table")
+
+        # Configure parameters for work with YT
+        # XXX: when ttl_cleanup would be a separate class and a separate worker, remove re-reading params
+        # (the code is dup with get_yt_stat)
+        yt_cluster = self.params.get('ttl_cleanup', {}).get('yt_cluster', "")
+        yt_token = self.params.get('ttl_cleanup', {}).get('yt_token', "")
+        yt_attempts = self.params.get('ttl_cleanup', {}).get('yt_attempts', 3)
+        yt_delay = self.params.get('ttl_cleanup', {}).get('yt_delay', 10)
+
+        yt_wrapper = YqlWrapper(cluster=yt_cluster, token=yt_token, attempts=yt_attempts, delay=yt_delay)
+
+        aggregation_table = self.params.get('ttl_cleanup', {}).get('aggregation_table', "")
+
+        ttl_hist = self._get_ttl_cleanup_last_run()
+
+        yt_wrapper.cleanup_aggregaton_table(aggregate_table=aggregation_table, couples_hist=ttl_hist)
+
+        logger.info("Cleaning up YT is complete")
+
+    def _ttl_yt_cleaner(self):
+        try:
+            logger.info('Starting ttl yt cleaner')
+
+            with sync_manager.lock(Planner.TTL_CLEANUP_LOCK, blocking=False):
+                self._cleanup_aggregation_yt()
+
+        except LockFailedError:
+            logger.info('TTl cleanup planner or ttl yt cleaner is already running')
+        except:
+            logger.exception('Failed to clean YT aggregation table')
+        finally:
+            logger.info('TTL YT cleaner finished')
+            self.__tq.add_task_at(
+                self.TTL_CLEANUP,
+                self.ttl_cleanup_yt_timer.next(),
+                self._ttl_yt_cleaner)
 
     def _do_ttl_cleanup(self):
         logger.info('Run ttl cleanup')
