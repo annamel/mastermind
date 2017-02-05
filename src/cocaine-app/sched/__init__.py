@@ -31,15 +31,6 @@ logger = getLogger('mm.planner')
 class Planner(object):
 
     MOVE_CANDIDATES = 'move_candidates'
-    RECOVER_DC = 'recover_dc'
-    COUPLE_DEFRAG = 'couple_defrag'
-    TTL_CLEANUP = 'ttl_cleanup'
-
-    RECOVERY_OP_CHUNK = 200
-
-    COUPLE_DEFRAG_LOCK = 'planner/couple_defrag'
-    RECOVER_DC_LOCK = 'planner/recover_dc'
-    TTL_CLEANUP_LOCK = 'planner/ttl_cleanup'
 
     def __init__(self, db, niu, job_processor, namespaces_settings):
 
@@ -54,38 +45,10 @@ class Planner(object):
         self.node_info_updater = niu
         self.namespaces_settings = namespaces_settings
 
-        self.recover_dc_timer = periodic_timer(
-            seconds=self.params.get('recover_dc', {}).get(
-                'recover_dc_period', 60 * 15))
-        self.couple_defrag_timer = periodic_timer(
-            seconds=self.params.get('couple_defrag', {}).get(
-                'couple_defrag_period', 60 * 15))
-        self.ttl_cleanup_timer = periodic_timer(
-            seconds=self.params.get('ttl_cleanup', {}).get('ttl_cleanup_period', 60 * 15))
+        starters = []
 
         if config['metadata'].get('planner', {}).get('db'):
             self.collection = Collection(db[config['metadata']['planner']['db']], 'planner')
-
-            if self.params.get('recover_dc', {}).get('enabled', False):
-                self.__tq.add_task_at(
-                    self.RECOVER_DC,
-                    self.recover_dc_timer.next(),
-                    self._recover_dc
-                )
-
-            if self.params.get('couple_defrag', {}).get('enabled', False):
-                self.__tq.add_task_at(
-                    self.COUPLE_DEFRAG,
-                    self.couple_defrag_timer.next(),
-                    self._couple_defrag
-                )
-
-            if self.params.get('ttl_cleanup', {}).get('enabled', False):
-                self.__tq.add_task_at(
-                    self.TTL_CLEANUP,
-                    self.ttl_cleanup_timer.next(),
-                    self._ttl_cleanup_planner
-                )
 
     def _start_tq(self):
         self.__tq.start()
@@ -93,84 +56,60 @@ class Planner(object):
     def add_planner(self, planner):
         planner.schedule_tasks(self.__tq)
 
-    def _get_yt_stat(self):
+    def register_periodic_func(self, starter_func, period_default, starter_name=None, lock_name=None):
         """
-        Extract statistics from YT logs
-        :return: list of couples ids with expired records volume above specified
+        Guarantee that starter_func would be run within specified period under a zookeeper lock
+        :param starter_func - a function to be run
+        :param period_default - the default value of period to run the function with
+            if the "{starter_name}_period" is not specified under {starter_name} sub-section with planner config section
+        :param starter_name - a logical name of starter. Name of starter subsection within planner section in config.
+                            Defaults to starter_func.__name__
+        :param lock_name - a name of lock in zookeeper that protects starter from simultaneous execution).
+                            Defaults to "planner/{starter_name}
         """
-        try:
-            # Configure parameters for work with YT
-            yt_cluster = self.params.get('ttl_cleanup', {}).get('yt_cluster', "")
-            yt_token = self.params.get('ttl_cleanup', {}).get('yt_token', "")
-            yt_attempts = self.params.get('ttl_cleanup', {}).get('yt_attempts', 3)
-            yt_delay = self.params.get('ttl_cleanup', {}).get('yt_delay', 10)
 
-            from yt_worker import YqlWrapper
-            yt_wrapper = YqlWrapper(cluster=yt_cluster, token=yt_token, attempts=yt_attempts, delay=yt_delay)
+        starter_name = starter_name or starter_func.__name__
+        lock_name = lock_name or "planner/{}".format(starter_name)
+        period_param = "{}_period".format(starter_name)
 
-            aggregation_table = self.params.get('ttl_cleanup', {}).get('aggregation_table', "")
-            base_table = self.params.get('ttl_cleanup', {}).get('tskv_log_table', "")
-            expired_threshold = self.params.get('ttl_cleanup', {}).get('ttl_threshold', 10 * float(1024 ** 3))  # 10GB
+        if not self.params.get(starter_name, {}).get('enabled', False):
+            logger.info("Starter {} is disabled".format(starter_name))
+            return
 
-            yt_wrapper.prepare_aggregate_for_yesterday(base_table, aggregation_table)
+        timer = periodic_timer(self.params.get(starter_name, {}).get(period_param, period_default))
 
-            couple_list = yt_wrapper.request_expired_stat(aggregation_table, expired_threshold)
-            logger.info("YT request has completed")
-            return couple_list
-        except:
-            logger.exception("Work with YQL failed")
-            return []
-
-    def _ttl_cleanup_planner(self):
-        try:
-            logger.info('Starting ttl cleanup planner')
-
-            with sync_manager.lock(Planner.TTL_CLEANUP_LOCK, blocking=False):
-                self._do_ttl_cleanup()
-
-        except LockFailedError:
-            logger.info('TTl cleanup planner is already running')
-        except Exception:
-            logger.exception('Failed to plan ttl cleanup')
-        finally:
-            logger.info('TTL cleanup planner finished')
-            self.__tq.add_task_at(
-                self.TTL_CLEANUP,
-                self.ttl_cleanup_timer.next(),
-                self._ttl_cleanup_planner)
-
-    def _do_ttl_cleanup(self):
-        logger.info('Run ttl cleanup')
-
-        couple_list = self._get_yt_stat()
-        for couple in couple_list:
-
-            iter_group = couple  # in tskv coupld id is actually group[0] from couple id
-            if iter_group not in storage.groups:
-                logger.error("Not valid group is extracted from aggregation log {}".format(iter_group))
-                continue
-            iter_group = storage.groups[iter_group]
-            if not iter_group.couple:
-                logger.error("Iter group is uncoupled {}".format(str(iter_group)))
-                continue
-
+        def _starter_periodic_func(self):
             try:
-                self.job_processor._create_job(
-                    job_type=jobs.JobTypes.TYPE_TTL_CLEANUP_JOB,
-                    params={
-                        'iter_group': iter_group.group_id,
-                        'couple': str(iter_group.couple),
-                        'namespace': iter_group.couple.namespace.id,
-                        'batch_size': None,  # get from config
-                        'attempts': None,  # get from config
-                        'nproc': None,  # get from config
-                        'wait_timeout': None,  # get from config
-                        'dry_run': False,
-                        'need_approving': not self.params.get('ttl_cleanup', {}).get('autoapprove', False),
-                    },
-                )
+                logger.info('Starting {}'.format(starter_name))
+
+                with sync_manager.lock(lock_name, blocking=False):
+                    starter_func()
+
+            except LockFailedError:
+                logger.info('Another {} is already running under {} lock'.format(starter_func.__name__, lock_name))
             except:
-                logger.exception("Creating job for iter group {} has excepted".format(iter_group))
+                logger.exception('Failed to {}'.format(starter_name))
+            finally:
+                logger.info('{} finished'.format(starter_name))
+                self.__tq.add_task_at(
+                    starter_name,
+                    timer.next(),
+                    _starter_periodic_func)
+
+        self.__tq.add_task_at(
+            starter_name,
+            timer.next(),
+            _starter_periodic_func
+        )
+
+        starter = {
+            "starter_func": starter_func,
+            "starter_name": starter_name,
+            "starter_lock": lock_name,
+            "starter_timer": timer,
+        }
+
+        self.starters.append(starter)
 
     @staticmethod
     def _prepare_candidates_by_dc(suitable_groups, unsuitable_dcs):
@@ -261,7 +200,7 @@ class Planner(object):
                           jobs.Job.STATUS_EXECUTING]
 
     @staticmethod
-    def _jobs_slots(active_jobs, job_type, max_jobs_count):
+    def jobs_slots(active_jobs, job_type, max_jobs_count):
         jobs_count = 0
         for job in active_jobs:
             if (job.type == job_type and
@@ -271,105 +210,30 @@ class Planner(object):
         return max_jobs_count - jobs_count
 
     @staticmethod
-    def _busy_group_ids(active_jobs):
+    def busy_group_ids(active_jobs):
         busy_group_ids = set()
         for job in active_jobs:
             busy_group_ids.update(job._involved_groups)
         return busy_group_ids
 
     @staticmethod
-    def _is_locked(couple, busy_group_ids):
+    def is_locked(couple, busy_group_ids):
         for group in couple.groups:
             if group.group_id in busy_group_ids:
                 return True
         return False
 
-    def _recover_dc(self):
-        try:
-            start_ts = time.time()
-            logger.info('Starting recover dc planner')
+    def get_history(self, sort_field):
+        cursor = self.collection.find().sort(sort_field, pymongo.ASCENDING)
+        if cursor.count() < len(storage.replicas_groupsets):
+            logger.info('Sync recover data is required: {0} records/{1} couples'.format(
+                cursor.count(), len(storage.replicas_groupsets)))
+            self.planner.sync_recover_data()
+            cursor = self.collection.find().sort(sort_field, pymongo.ASCENDING)
 
-            max_recover_jobs = config.get('jobs', {}).get('recover_dc_job', {}).get(
-                'max_executing_jobs', 3)
-            # prechecking for new or pending tasks
-            count = self.job_processor.job_finder.jobs_count(
-                types=jobs.JobTypes.TYPE_RECOVER_DC_JOB,
-                statuses=[jobs.Job.STATUS_NOT_APPROVED,
-                          jobs.Job.STATUS_NEW,
-                          jobs.Job.STATUS_EXECUTING])
-            if count >= max_recover_jobs:
-                logger.info('Found {0} unfinished recover dc jobs (>= {1})'.format(
-                    count, max_recover_jobs))
-                return
+        return cursor
 
-            with sync_manager.lock(Planner.RECOVER_DC_LOCK, blocking=False):
-                self._do_recover_dc()
-
-        except LockFailedError:
-            logger.info('Recover dc planner is already running')
-        except Exception:
-            logger.exception('Recover dc planner failed')
-        finally:
-            logger.info('Recover dc planner finished, time: {:.3f}'.format(
-                time.time() - start_ts))
-            self.__tq.add_task_at(
-                self.RECOVER_DC,
-                self.recover_dc_timer.next(),
-                self._recover_dc)
-
-    def _do_recover_dc(self):
-
-        max_recover_jobs = config.get('jobs', {}).get('recover_dc_job', {}).get(
-            'max_executing_jobs', 3)
-
-        active_jobs = self.job_processor.job_finder.jobs(
-            statuses=jobs.Job.ACTIVE_STATUSES,
-            sort=False,
-        )
-
-        slots = self._jobs_slots(active_jobs,
-                                 jobs.JobTypes.TYPE_RECOVER_DC_JOB,
-                                 max_recover_jobs)
-        if slots <= 0:
-            logger.info('Found {0} unfinished recover dc jobs'.format(
-                max_recover_jobs - slots))
-            return
-
-        created_jobs = 0
-        logger.info('Trying to create {0} jobs'.format(slots))
-
-        need_approving = not self.params.get('recover_dc', {}).get('autoapprove', False)
-
-        couple_ids_to_recover = self._recover_top_weight_couples(
-            slots, active_jobs)
-
-        for couple_id in couple_ids_to_recover:
-
-            logger.info('Creating recover job for couple {0}'.format(couple_id))
-
-            couple = storage.replicas_groupsets[couple_id]
-
-            if not _recovery_applicable_couple(couple):
-                logger.info('Couple {0} is no more applicable for recovery job'.format(
-                    couple_id))
-                continue
-
-            try:
-                job = self.job_processor._create_job(
-                    jobs.JobTypes.TYPE_RECOVER_DC_JOB,
-                    {'couple': couple_id,
-                     'need_approving': need_approving})
-                logger.info('Created recover dc job for couple {0}, job id {1}'.format(
-                    couple, job.id))
-                created_jobs += 1
-            except Exception as e:
-                logger.error('Failed to create recover dc job for couple {0}: {1}'.format(
-                    couple_id, e))
-                continue
-
-        logger.info('Successfully created {0} recover dc jobs'.format(created_jobs))
-
-    def sync_recover_data(self):
+    def sync_recover_data(self, lim=200):
 
         recover_data_couples = set()
 
@@ -378,14 +242,14 @@ class Planner(object):
             cursor = self.collection.find(
                 fields=['couple'],
                 sort=[('couple', pymongo.ASCENDING)],
-                skip=offset, limit=self.RECOVERY_OP_CHUNK)
+                skip=offset, limit=lim)
             count = 0
             for rdc in cursor:
                 recover_data_couples.add(rdc['couple'])
                 count += 1
             offset += count
 
-            if count < self.RECOVERY_OP_CHUNK:
+            if count < lim:
                 break
 
         ts = int(time.time())
@@ -422,97 +286,6 @@ class Planner(object):
                     res['nRemoved'], len(bulk_remove_couples), res))
             offset += res['nRemoved']
 
-    def _recover_top_weight_couples(self, count, active_jobs):
-        keys_diffs_sorted = []
-        keys_diffs = {}
-        ts_diffs = {}
-
-        busy_group_ids = self._busy_group_ids(active_jobs)
-
-        for couple in storage.replicas_groupsets.keys():
-            if self._is_locked(couple, busy_group_ids):
-                continue
-            if not _recovery_applicable_couple(couple):
-                continue
-            c_diff = couple.keys_diff
-            keys_diffs_sorted.append((str(couple), c_diff))
-            keys_diffs[str(couple)] = c_diff
-        keys_diffs_sorted.sort(key=lambda x: x[1])
-
-        cursor = self.collection.find().sort('recover_ts', pymongo.ASCENDING)
-        if cursor.count() < len(storage.replicas_groupsets):
-            logger.info('Sync recover data is required: {0} records/{1} couples'.format(
-                cursor.count(), len(storage.replicas_groupsets)))
-            self.sync_recover_data()
-            cursor = self.collection.find().sort('recover_ts',
-                                                 pymongo.ASCENDING)
-
-        ts = int(time.time())
-
-        # by default one key loss is equal to one day without recovery
-        keys_cf = self.params.get('recover_dc', {}).get('keys_cf', 86400)
-        ts_cf = self.params.get('recover_dc', {}).get('timestamp_cf', 1)
-
-        def weight(keys_diff, ts_diff):
-            return keys_diff * keys_cf + ts_diff * ts_cf
-
-        weights = {}
-        candidates = []
-        for i in xrange(cursor.count() / self.RECOVERY_OP_CHUNK + 1):
-            couples_data = cursor[i * self.RECOVERY_OP_CHUNK:
-                                  (i + 1) * self.RECOVERY_OP_CHUNK]
-            max_recover_ts_diff = None
-            for couple_data in couples_data:
-                c = couple_data['couple']
-                ts_diff = ts - couple_data['recover_ts']
-                ts_diffs[c] = ts_diff
-                if c not in keys_diffs:
-                    # couple was not applicable for recovery, skip
-                    continue
-                weights[c] = weight(keys_diffs[c], ts_diffs[c])
-                max_recover_ts_diff = ts_diff
-
-            cursor.rewind()
-
-            top_candidates_len = min(count, len(weights))
-
-            if not top_candidates_len:
-                continue
-
-            # TODO: Optimize this
-            candidates = sorted(weights.iteritems(), key=lambda x: x[1])
-            min_weight_candidate = candidates[-top_candidates_len]
-            min_keys_diff = min(
-                keys_diffs[candidate[0]]
-                for candidate in candidates[-top_candidates_len:])
-
-            missed_candidate = None
-            idx = len(keys_diffs_sorted) - 1
-            while idx >= 0 and keys_diffs_sorted[idx] >= min_keys_diff:
-                c, keys_diff = keys_diffs_sorted[idx]
-                idx -= 1
-                if c in ts_diffs:
-                    continue
-                if weight(keys_diff, max_recover_ts_diff) > min_weight_candidate[1]:
-                    # found possible candidate
-                    missed_candidate = c
-                    break
-
-            logger.debug(
-                'Current round: {0}, current min weight candidate '
-                '{1}, weight: {2}, possible missed candidate is couple '
-                '{3}, keys diff: {4} (max recover ts diff = {5})'.format(
-                    i, min_weight_candidate[0], min_weight_candidate[1],
-                    missed_candidate, keys_diffs.get(missed_candidate),
-                    max_recover_ts_diff))
-
-            if missed_candidate is None:
-                break
-
-        logger.info('Top candidates: {0}'.format(candidates[-count:]))
-
-        return [candidate[0] for candidate in candidates[-count:]]
-
     def update_recover_ts(self, couple_id, ts):
         ts = int(ts)
         res = self.collection.update(
@@ -523,124 +296,6 @@ class Planner(object):
             logger.error('Unexpected mongo response during recover ts update: {0}'.format(res))
             raise RuntimeError('Mongo operation result: {0}'.format(res['ok']))
 
-    def _couple_defrag(self):
-        try:
-            start_ts = time.time()
-            logger.info('Starting couple defrag planner')
-
-            max_defrag_jobs = config.get('jobs', {}).get(
-                'couple_defrag_job', {}).get('max_executing_jobs', 3)
-            # prechecking for new or pending tasks
-            count = self.job_processor.job_finder.jobs_count(
-                types=jobs.JobTypes.TYPE_COUPLE_DEFRAG_JOB,
-                statuses=[jobs.Job.STATUS_NOT_APPROVED,
-                          jobs.Job.STATUS_NEW,
-                          jobs.Job.STATUS_EXECUTING])
-
-            if count >= max_defrag_jobs:
-                logger.info('Found {0} unfinished couple defrag jobs '
-                            '(>= {1})'.format(count, max_defrag_jobs))
-                return
-
-            with sync_manager.lock(Planner.COUPLE_DEFRAG_LOCK, blocking=False):
-                self._do_couple_defrag()
-
-        except LockFailedError:
-            logger.info('Couple defrag planner is already running')
-        except Exception:
-            logger.exception('Couple defrag planner failed')
-        finally:
-            logger.info('Couple defrag planner finished, time: {:.3f}'.format(
-                time.time() - start_ts))
-            self.__tq.add_task_at(
-                self.COUPLE_DEFRAG,
-                self.couple_defrag_timer.next(),
-                self._couple_defrag)
-
-    def _do_couple_defrag(self):
-
-        max_defrag_jobs = config.get('jobs', {}).get(
-            'couple_defrag_job', {}).get('max_executing_jobs', 3)
-
-        active_jobs = self.job_processor.job_finder.jobs(
-            statuses=jobs.Job.ACTIVE_STATUSES,
-            sort=False,
-        )
-        slots = self._jobs_slots(active_jobs,
-                                 jobs.JobTypes.TYPE_COUPLE_DEFRAG_JOB,
-                                 max_defrag_jobs)
-
-        if slots <= 0:
-            logger.info('Found {0} unfinished couple defrag jobs'.format(
-                max_defrag_jobs - slots))
-            return
-
-        busy_group_ids = self._busy_group_ids(active_jobs)
-
-        couples_to_defrag = []
-        for couple in storage.replicas_groupsets.keys():
-            if self._is_locked(couple, busy_group_ids):
-                continue
-            if couple.status not in storage.GOOD_STATUSES:
-                continue
-            couple_stat = couple.get_stat()
-            if couple_stat.files_removed_size == 0:
-                continue
-
-            insufficient_space_nb = None
-            want_defrag = False
-
-            for group in couple.groups:
-                for nb in group.node_backends:
-                    if nb.stat.vfs_free_space < nb.stat.max_blob_base_size * 2:
-                        insufficient_space_nb = nb
-                        break
-                if insufficient_space_nb:
-                    break
-                want_defrag |= group.want_defrag
-
-            if not want_defrag:
-                continue
-
-            if insufficient_space_nb:
-                logger.warn(
-                    'Couple {0}: node backend {1} has insufficient '
-                    'free space for defragmentation, max_blob_size {2}, vfs free_space {3}'.format(
-                        str(couple), str(nb), nb.stat.max_blob_base_size, nb.stat.vfs_free_space))
-                continue
-
-            logger.info('Couple defrag candidate: {}, max files_removed_size in groups: {}'.format(
-                str(couple), couple_stat.files_removed_size))
-
-            couples_to_defrag.append((str(couple), couple_stat.files_removed_size))
-
-        couples_to_defrag.sort(key=lambda c: c[1])
-        need_approving = not self.params.get('couple_defrag', {}).get('autoapprove', False)
-
-        if not couples_to_defrag:
-            logger.info('No couples to defrag found')
-            return
-
-        created_jobs = 0
-        logger.info('Trying to create {0} jobs'.format(slots))
-
-        while couples_to_defrag and created_jobs < slots:
-            couple_tuple, fragmentation = couples_to_defrag.pop()
-
-            try:
-                job = self.job_processor._create_job(
-                    jobs.JobTypes.TYPE_COUPLE_DEFRAG_JOB,
-                    {'couple': couple_tuple,
-                     'need_approving': need_approving,
-                     'is_cache_couple': False})
-                logger.info('Created couple defrag job for couple {0}, job id {1}'.format(
-                    couple_tuple, job.id))
-                created_jobs += 1
-            except Exception as e:
-                logger.error('Failed to create couple defrag job: {0}'.format(e))
-                continue
-
-        logger.info('Successfully created {0} couple defrag jobs'.format(created_jobs))
 
     @h.concurrent_handler
     def restore_group(self, request):
@@ -1625,8 +1280,3 @@ class Planner(object):
 
         return job.dump()
 
-
-def _recovery_applicable_couple(couple):
-    if couple.status not in storage.GOOD_STATUSES:
-        return False
-    return True

@@ -19,27 +19,19 @@ MOVE_PLANNER_PARAMS = config.get('planner', {}).get('move', {})
 
 class MovePlanner(object):
 
-    MOVE_CANDIDATES = 'move_candidates'
-    MOVE_LOCK = 'planner/move'
-
-    def __init__(self, db, niu, job_processor):
+    def __init__(self, db, niu, job_processor, planner):
 
         self.job_processor = job_processor
 
         self.node_info_updater = niu
+        self.planner = planner
 
-    def schedule_tasks(self, tq):
+        period = MOVE_PLANNER_PARAMS.get('generate_plan_period', 1800)
 
-        self._planner_tq = tq
-
-        if MOVE_PLANNER_PARAMS.get('enabled', False):
-            self._planner_tq.add_task_in(
-                self.MOVE_CANDIDATES,
-                10,
-                self._move_candidates
-            )
+        planner.register_periodic_func(self._move_candidates, period, starter_name="move")
 
     def _move_candidates(self):
+
         try:
             logger.info('Starting move jobs planner')
 
@@ -57,20 +49,10 @@ class MovePlanner(object):
                 logger.info('Found {0} unfinished move jobs (>= {1})'.format(count, max_move_jobs))
                 return
 
-            with sync_manager.lock(MovePlanner.MOVE_LOCK, blocking=False):
-                self._do_move_candidates(max_move_jobs - count)
+            self._do_move_candidates(max_move_jobs - count)
 
-        except LockFailedError:
-            logger.info('Move jobs dc planner is already running')
-        except Exception:
+        except:
             logger.exception('Move jobs planner failed')
-        finally:
-            logger.info('Move candidates planner finished')
-            self._planner_tq.add_task_in(
-                task_id=self.MOVE_CANDIDATES,
-                secs=MOVE_PLANNER_PARAMS.get('generate_plan_period', 1800),
-                function=self._move_candidates,
-            )
 
     def _do_move_candidates(self, max_jobs_count):
 
@@ -335,11 +317,11 @@ class StorageState(object):
                         # NOTE: group was not assigned to a couple because of some error
                         continue
 
-                    assert isinstance(group.couple, storage.Couple), \
-                        "Group {} of type 'data' is assigned to non-replicas groupset: {}".format(
-                            group,
-                            group.couple
-                        )
+                 #   assert isinstance(group.couple, storage.Couple), \
+                 #       "Group {} of type 'data' is assigned to non-replicas groupset: {}".format(
+                 #           group,
+                 #           group.couple
+                 #       )
                     if group.couple.status != storage.Status.FULL:
                         continue
 

@@ -40,22 +40,14 @@ class ExternalStorageConvertingPlanner(object):
     CONVERTING_CANDIDATES = 'converting_candidates'
     CONVERTING_LOCK = 'planner/external_storage_converting'
 
-    def __init__(self, db, job_processor, namespaces_settings):
+    def __init__(self, db, job_processor, namespaces_settings, planner):
 
         self.job_processor = job_processor
         self.namespaces_settings = namespaces_settings
         self.queue = ExternalStorageConvertQueue(db)
-
-    def schedule_tasks(self, tq):
-
-        self._planner_tq = tq
-
-        if CONVERTING_PLANNER_PARAMS.get('enabled', False):
-            self._planner_tq.add_task_in(
-                self.CONVERTING_CANDIDATES,
-                10,
-                self._converting_candidates
-            )
+        planner.register_periodic_func(self._converting_candidates,
+                                       period=1800,
+                                       starter_name="external_storage_converting")
 
     SUPPORTED_GROUPSET_TYPES = (
         storage.GROUPSET_LRC,
@@ -113,21 +105,11 @@ class ExternalStorageConvertingPlanner(object):
                 )
                 return
 
-            with sync_manager.lock(ExternalStorageConvertingPlanner.CONVERTING_LOCK, blocking=False):
-                self._update_queue_state()
-                self._do_converting_candidates(job_type, max_converting_jobs - count)
+            self._update_queue_state()
+            self._do_converting_candidates(job_type, max_converting_jobs - count)
 
-        except LockFailedError:
-            logger.info('External storage converting planner is already running')
-        except Exception:
+        except:
             logger.exception('External storage converting planner failed')
-        finally:
-            logger.info('External storage converting planner finished')
-            self._planner_tq.add_task_in(
-                task_id=self.CONVERTING_CANDIDATES,
-                secs=CONVERTING_PLANNER_PARAMS.get('generate_plan_period', 1800),
-                function=self._converting_candidates,
-            )
 
     def _update_queue_state(self):
         converting_items = self.queue.items(status=ExternalStorageConvertQueue.STATUS_CONVERTING)
