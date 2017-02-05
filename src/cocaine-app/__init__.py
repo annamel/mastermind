@@ -39,9 +39,7 @@ import couple_records
 import minions_monitor
 import node_info_updater
 from planner import Planner
-from planner.move_planner import MovePlanner
-from planner.lrc_reserve_groups import LrcReservePlanner
-from planner.external_storage_converting_planner import ExternalStorageConvertingPlanner
+from sched import Scheduler
 from manual_locks import manual_locker
 from namespaces import NamespacesSettings
 from mastermind_core.config import config
@@ -214,7 +212,10 @@ def init_minions():
     return m
 
 
-def init_planner(job_processor, niu, namespaces_settings, move_planner, external_storage_converting_planner, lrc_reserve_group_planner):
+def init_planner(job_processor, niu, namespaces_settings):
+
+    planner_new = config.get('scheduler', {}).get('enabled', False)
+
     planner = Planner(meta_db, niu, job_processor, namespaces_settings)
     register_handle(planner.restore_group)
     register_handle(planner.move_group)
@@ -222,39 +223,49 @@ def init_planner(job_processor, niu, namespaces_settings, move_planner, external
     register_handle(planner.restore_groups_from_path)
     register_handle(planner.ttl_cleanup)
 
-    if move_planner:
+    if planner_new:
+        # redefine planner, while handlers are still stored within old planner object
+        planner = Scheduler(meta_db, niu, job_processor, namespaces_settings)
+        from sched.ttl_cleanup_starter import TtlCleanupStarter
+        from sched.move_planner import MovePlanner
+        from sched.recover_starter import RecoveryStarter
+        from sched.defrag_starter import DefragStarter
+        ttl_cleanup_starter = TtlCleanupStarter(planner)
+        move_starter = MovePlanner(meta_db, niu, job_processor, planner)
+        recovery_starter = RecoveryStarter(job_processor, planner)
+        defrag_starter = DefragStarter(job_processor, planner)
+    else:
+        from planner.move_planner import MovePlanner
+        move_planner = MovePlanner(meta_db, niu, job_processor)
         planner.add_planner(move_planner)
-    if external_storage_converting_planner:
-        planner.add_planner(external_storage_converting_planner)
-    if lrc_reserve_group_planner:
-        planner.add_planner(lrc_reserve_group_planner)
+        from planner.lrc_reserve_groups import LrcReservePlanner
+        lrc_reserve_planner = LrcReservePlanner(job_processor)
+        register_handle(lrc_reserve_planner.create_lrc_restore_jobs)
+        register_handle(lrc_reserve_planner.create_uncoupled_lrc_restore_jobs)
+        planner.add_planner(lrc_reserve_planner)
 
-    return planner
-
-
-def init_move_planner(job_processor, niu):
-    planner = MovePlanner(meta_db, niu, job_processor)
-    return planner
-
-
-def init_lrc_reserve_planner(job_processor):
-    planner = LrcReservePlanner(job_processor)
-    register_handle(planner.create_lrc_restore_jobs)
-    register_handle(planner.create_uncoupled_lrc_restore_jobs)
-    return planner
-
-
-def init_external_storage_converting_planner(job_processor, namespaces_settings):
-    if not config['metadata'].get('external_storage', {}).get('db'):
+    # Need to create it anyway since there are handlers
+    external_storage_enabled = config['metadata'].get('external_storage', {}).get('db')
+    if not external_storage_enabled:
         logger.warn(
             'External storage db is not set up ("metadata.external_storage.db" key), external '
             'storage convert planner will not be initialized'
         )
-        return None
-    planner = ExternalStorageConvertingPlanner(meta_db, job_processor, namespaces_settings)
-    register_handle(planner.convert_external_storage_to_groupset)
-    register_handle(planner.get_convert_queue_item)
-    register_handle(planner.update_convert_queue_item)
+    else:
+        if planner_new:
+            from sched.external_storage_converting_planner import ExternalStorageConvertingPlanner
+            external_storage_converting_planner = \
+                ExternalStorageConvertingPlanner(meta_db, job_processor, namespaces_settings, planner)
+        else:
+            from planner.external_storage_converting_planner import ExternalStorageConvertingPlanner
+            external_storage_converting_planner = \
+                ExternalStorageConvertingPlanner(meta_db, job_processor, namespaces_settings)
+            planner.add_planner(external_storage_converting_planner)
+
+        register_handle(external_storage_converting_planner.convert_external_storage_to_groupset)
+        register_handle(external_storage_converting_planner.get_convert_queue_item)
+        register_handle(external_storage_converting_planner.update_convert_queue_item)
+
     return planner
 
 
@@ -354,10 +365,7 @@ init_statistics()
 m = init_minions()
 j = init_job_processor(jf, m, niu, external_storage_meta, crf)
 if j:
-    move_planner = init_move_planner(j, niu)
-    external_storage_converting_planner = init_external_storage_converting_planner(j, namespaces_settings)
-    lrc_reserve_planner = init_lrc_reserve_planner(j)
-    po = init_planner(j, niu, namespaces_settings, move_planner, external_storage_converting_planner, lrc_reserve_planner)
+    po = init_planner(j, niu, namespaces_settings)
     j.planner = po
 else:
     po = None

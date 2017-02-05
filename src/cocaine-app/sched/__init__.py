@@ -28,7 +28,7 @@ import timed_queue
 logger = getLogger('mm.sched')
 
 
-class Planner(object):
+class Scheduler(object):
 
     def __init__(self, db, niu, job_processor, namespaces_settings):
 
