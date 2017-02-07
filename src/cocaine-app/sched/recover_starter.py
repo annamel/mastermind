@@ -6,18 +6,18 @@ import storage
 import time
 
 
-logger = logging.getLogger('mm.planner.recover')
+logger = logging.getLogger('mm.sched.recover')
 
 
 class RecoveryStarter(object):
 
     RECOVERY_OP_CHUNK = 200
 
-    def __init__(self, job_processor, planner ):
+    def __init__(self, job_processor, planner):
         self.planner = planner
         self.job_processor = job_processor
         planner.register_periodic_func(self._recover_dc, 60*15, starter_name="recover_dc")
-        self.params = config.get('planner', {})
+        self.params = config.get('scheduler', {})
 
 
     def _recover_dc(self):

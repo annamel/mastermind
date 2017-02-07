@@ -10,11 +10,11 @@ from sync import sync_manager
 from sync.error import LockFailedError
 
 
-logger = logging.getLogger('mm.planner.move')
+logger = logging.getLogger('mm.sched.move')
 
 
 JOBS_PARAMS = config.get('jobs', {})
-MOVE_PLANNER_PARAMS = config.get('planner', {}).get('move', {})
+MOVE_PLANNER_PARAMS = config.get('scheduler', {}).get('move', {})
 
 
 class MovePlanner(object):

@@ -13,11 +13,11 @@ from sync import sync_manager
 from sync.error import LockFailedError
 
 
-logger = logging.getLogger('mm.planner.converting')
+logger = logging.getLogger('mm.sched.converting')
 
 
 JOBS_PARAMS = config.get('jobs', {})
-CONVERTING_PLANNER_PARAMS = config.get('planner', {}).get('external_storage_converting', {})
+CONVERTING_PLANNER_PARAMS = config.get('scheduler', {}).get('external_storage_converting', {})
 LIMITS = CONVERTING_PLANNER_PARAMS.get('limits', {})
 
 
@@ -37,9 +37,6 @@ class HostsQueue(object):
 
 class ExternalStorageConvertingPlanner(object):
 
-    CONVERTING_CANDIDATES = 'converting_candidates'
-    CONVERTING_LOCK = 'planner/external_storage_converting'
-
     def __init__(self, db, job_processor, namespaces_settings, planner):
 
         self.job_processor = job_processor
@@ -58,7 +55,7 @@ class ExternalStorageConvertingPlanner(object):
         if 'type' not in groupset_settings:
             raise ValueError(
                 'Converting groupset type is not set '
-                '(["planner"]["external_storage_converting"]["convert_groupset"]["type"])'
+                '(["scheduler"]["external_storage_converting"]["convert_groupset"]["type"])'
             )
 
         if groupset_settings['type'] not in ExternalStorageConvertingPlanner.SUPPORTED_GROUPSET_TYPES:
@@ -78,7 +75,7 @@ class ExternalStorageConvertingPlanner(object):
             if 'convert_groupset' not in CONVERTING_PLANNER_PARAMS:
                 raise RuntimeError(
                     'Convert groupset type is not set '
-                    '(["planner"]["external_storage_converting"]["convert_groupset"])'
+                    '(["scheduler"]["external_storage_converting"]["convert_groupset"])'
                 )
 
             groupset_settings = CONVERTING_PLANNER_PARAMS['convert_groupset']

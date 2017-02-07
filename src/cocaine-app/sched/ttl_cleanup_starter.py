@@ -6,12 +6,12 @@ from mastermind_core.config import config
 import storage
 
 
-logger = logging.getLogger('mm.planner.ttl_cleanup')
+logger = logging.getLogger('mm.sched.ttl_cleanup')
 
 class TtlCleanupStarter(object):
     def __init__(self, planner):
         planner.register_periodic_func(self._do_ttl_cleanup, 60*15, starter_name="ttl_cleanup")
-        self.params = config.get('planner', {})
+        self.params = config.get('scheduler', {})
         self.planner = planner
 
     def _get_yt_stat(self):

@@ -6,7 +6,7 @@ import storage
 import time
 
 
-logger = logging.getLogger('mm.planner.recover')
+logger = logging.getLogger('mm.sched.defrag')
 
 
 class DefragStarter(object):
@@ -14,7 +14,7 @@ class DefragStarter(object):
         self.planner = planner
         self.job_processor = job_processor
         planner.register_periodic_func(self._couple_defrag, 60*15, starter_name="couple_defrag")
-        self.params = config.get('planner', {})
+        self.params = config.get('scheduler', {})
 
     def _couple_defrag(self):
         try:
