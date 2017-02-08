@@ -42,9 +42,7 @@ class ExternalStorageConvertingPlanner(object):
         self.job_processor = job_processor
         self.namespaces_settings = namespaces_settings
         self.queue = ExternalStorageConvertQueue(db)
-        planner.register_periodic_func(self._converting_candidates,
-                                       period=1800,
-                                       starter_name="external_storage_converting")
+        planner.register_periodic_func(self._converting_candidates, 1800, "external_storage_converting")
 
     SUPPORTED_GROUPSET_TYPES = (
         storage.GROUPSET_LRC,

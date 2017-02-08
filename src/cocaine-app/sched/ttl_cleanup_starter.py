@@ -45,6 +45,8 @@ class TtlCleanupStarter(object):
     def _do_ttl_cleanup(self):
         logger.info('Run ttl cleanup')
 
+        job_params = []
+
         couple_list = self._get_yt_stat()
         for couple in couple_list:
 
@@ -57,10 +59,8 @@ class TtlCleanupStarter(object):
                 logger.error("Iter group is uncoupled {}".format(str(iter_group)))
                 continue
 
-            try:
-                self.job_processor._create_job(
-                    job_type=jobs.JobTypes.TYPE_TTL_CLEANUP_JOB,
-                    params={
+            job_params.append(
+                    {
                         'iter_group': iter_group.group_id,
                         'couple': str(iter_group.couple),
                         'namespace': iter_group.couple.namespace.id,
@@ -68,9 +68,8 @@ class TtlCleanupStarter(object):
                         'attempts': None,  # get from config
                         'nproc': None,  # get from config
                         'wait_timeout': None,  # get from config
-                        'dry_run': False,
-                        'need_approving': not self.params.get('ttl_cleanup', {}).get('autoapprove', False),
-                    },
-                )
-            except:
-                logger.exception("Creating job for iter group {} has excepted".format(iter_group))
+                        'dry_run': False
+                    })
+
+        sched_params = self.params.get('ttl_cleanup')
+        self.planner.process_jobs(jobs.JobTypes.TYPE_TTL_CLEANUP_JOB, job_params, sched_params)

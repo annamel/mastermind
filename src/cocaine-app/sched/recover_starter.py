@@ -16,60 +16,14 @@ class RecoveryStarter(object):
     def __init__(self, job_processor, planner):
         self.planner = planner
         self.job_processor = job_processor
-        planner.register_periodic_func(self._recover_dc, 60*15, starter_name="recover_dc")
+        planner.register_periodic_func(self._do_recover_dc, 60*15, starter_name="recover_dc")
         self.params = config.get('scheduler', {})
-
-
-    def _recover_dc(self):
-        try:
-            start_ts = time.time()
-
-            max_recover_jobs = config.get('jobs', {}).get('recover_dc_job', {}).get(
-                'max_executing_jobs', 3)
-            # prechecking for new or pending tasks
-            count = self.job_processor.job_finder.jobs_count(
-                types=jobs.JobTypes.TYPE_RECOVER_DC_JOB,
-                statuses=[jobs.Job.STATUS_NOT_APPROVED,
-                          jobs.Job.STATUS_NEW,
-                          jobs.Job.STATUS_EXECUTING])
-            if count >= max_recover_jobs:
-                logger.info('Found {0} unfinished recover dc jobs (>= {1})'.format(
-                    count, max_recover_jobs))
-                return
-
-            self._do_recover_dc()
-
-            logger.info('Recover dc planner finished, time: {:.3f}'.format(
-                time.time() - start_ts))
-
-        except:
-            logger.exception('Recover dc planner failed')
 
     def _do_recover_dc(self):
 
-        max_recover_jobs = config.get('jobs', {}).get('recover_dc_job', {}).get(
-            'max_executing_jobs', 3)
+        couple_ids_to_recover = self._recover_top_weight_couples()
 
-        active_jobs = self.job_processor.job_finder.jobs(
-            statuses=jobs.Job.ACTIVE_STATUSES,
-            sort=False,
-        )
-
-        slots = self.planner.jobs_slots(active_jobs,
-                                 jobs.JobTypes.TYPE_RECOVER_DC_JOB,
-                                 max_recover_jobs)
-        if slots <= 0:
-            logger.info('Found {0} unfinished recover dc jobs'.format(
-                max_recover_jobs - slots))
-            return
-
-        created_jobs = 0
-        logger.info('Trying to create {0} jobs'.format(slots))
-
-        need_approving = not self.params.get('recover_dc', {}).get('autoapprove', False)
-
-        couple_ids_to_recover = self._recover_top_weight_couples(
-            slots, active_jobs)
+        jobs_param = []
 
         for couple_id in couple_ids_to_recover:
 
@@ -82,25 +36,25 @@ class RecoveryStarter(object):
                     couple_id))
                 continue
 
-            try:
-                job = self.job_processor._create_job(
-                    jobs.JobTypes.TYPE_RECOVER_DC_JOB,
-                    {'couple': couple_id,
-                     'need_approving': need_approving})
-                logger.info('Created recover dc job for couple {0}, job id {1}'.format(
-                    couple, job.id))
-                created_jobs += 1
-            except Exception as e:
-                logger.error('Failed to create recover dc job for couple {0}: {1}'.format(
-                    couple_id, e))
-                continue
+            jobs_param.append(
+                    {'couple': couple_id})
+
+        sched_params = self.params.get('recover_dc')
+        created_jobs = self.planner.process_jobs(jobs.JobTypes.TYPE_RECOVER_DC_JOB, jobs_param, sched_params)
 
         logger.info('Successfully created {0} recover dc jobs'.format(created_jobs))
 
-    def _recover_top_weight_couples(self, count, active_jobs):
+    def _recover_top_weight_couples(self):
         keys_diffs_sorted = []
         keys_diffs = {}
         ts_diffs = {}
+
+        # XXX: drop this code as soon as sched would consider group inter-crossing
+        max_recover_jobs = config.get('jobs', {}).get('recover_dc_job', {}).get('max_executing_jobs', 3)
+
+        active_jobs = self.job_processor.job_finder.jobs(statuses=jobs.Job.ACTIVE_STATUSES, sort=False)
+
+        count = self.planner.jobs_slots(active_jobs, jobs.JobTypes.TYPE_RECOVER_DC_JOB, max_recover_jobs)
 
         busy_group_ids = self.planner.busy_group_ids(active_jobs)
 
