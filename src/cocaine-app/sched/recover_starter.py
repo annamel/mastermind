@@ -56,11 +56,8 @@ class RecoveryStarter(object):
 
         count = self.planner.jobs_slots(active_jobs, jobs.JobTypes.TYPE_RECOVER_DC_JOB, max_recover_jobs)
 
-        busy_group_ids = self.planner.busy_group_ids(active_jobs)
-
         for couple in storage.replicas_groupsets.keys():
-            if self.planner.is_locked(couple, busy_group_ids):
-                continue
+
             if not _recovery_applicable_couple(couple):
                 continue
             c_diff = couple.keys_diff

@@ -356,20 +356,6 @@ class Scheduler(object):
 
         return max_jobs_count - jobs_count
 
-    @staticmethod
-    def busy_group_ids(active_jobs):
-        busy_group_ids = set()
-        for job in active_jobs:
-            busy_group_ids.update(job._involved_groups)
-        return busy_group_ids
-
-    @staticmethod
-    def is_locked(couple, busy_group_ids):
-        for group in couple.groups:
-            if group.group_id in busy_group_ids:
-                return True
-        return False
-
     def get_history(self, sort_field):
         cursor = self.collection.find().sort(sort_field, pymongo.ASCENDING)
         if cursor.count() < len(storage.replicas_groupsets):

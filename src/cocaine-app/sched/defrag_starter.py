@@ -18,12 +18,8 @@ class DefragStarter(object):
 
     def _do_couple_defrag(self):
 
-        busy_group_ids = self.planner.busy_group_ids(active_jobs)
-
         couples_to_defrag = []
         for couple in storage.replicas_groupsets.keys():
-            if self.planner.is_locked(couple, busy_group_ids):
-                continue
             if couple.status not in storage.GOOD_STATUSES:
                 continue
             couple_stat = couple.get_stat()
