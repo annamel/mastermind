@@ -44,6 +44,7 @@ class Scheduler(object):
             self.collection = Collection(db[config['metadata']['scheduler']['db']], 'scheduler')
 
         self.res = defaultdict(list)
+        self.history_data = {}
 
         # store job limits instead of regular updating it from the config
         self.res_limits = defaultdict(dict)
@@ -346,78 +347,61 @@ class Scheduler(object):
 
         return created_job
 
-    @staticmethod
-    def jobs_slots(active_jobs, job_type, max_jobs_count):
-        jobs_count = 0
-        for job in active_jobs:
-            if (job.type == job_type and
-                    job.status in Scheduler.COUNTABLE_STATUSES):
-                jobs_count += 1
+    def get_history(self):
 
-        return max_jobs_count - jobs_count
+        if len(self.history_data) != len(storage.replicas_groupsets):
+            self.sync_history()
+        return self.history_data
 
-    def get_history(self, sort_field):
-        cursor = self.collection.find().sort(sort_field, pymongo.ASCENDING)
-        if cursor.count() < len(storage.replicas_groupsets):
-            logger.info('Sync recover data is required: {0} records/{1} couples'.format(
-                cursor.count(), len(storage.replicas_groupsets)))
-            self.sync_recover_data()
-            cursor = self.collection.find().sort(sort_field, pymongo.ASCENDING)
+    def sync_history(self):
 
-        return cursor
+        cursor = self.collection.find()
 
-    def sync_recover_data(self, lim=200):
+        logger.info('Sync recover data is required: {} records/{} couples, cursor {}'.format(
+                len(self.history_data), len(storage.replicas_groupsets), cursor.count()))
 
         recover_data_couples = set()
+        history = {}
 
-        offset = 0
-        while True:
-            cursor = self.collection.find(
-                fields=['couple'],
-                sort=[('couple', pymongo.ASCENDING)],
-                skip=offset, limit=lim)
-            count = 0
-            for rdc in cursor:
-                recover_data_couples.add(rdc['couple'])
-                count += 1
-            offset += count
-
-            if count < lim:
-                break
+        for data_record in cursor:
+            couple_str = data_record['couple']
+            history[couple_str] = {'recover_ts': data_record.get('recover_ts')}
+            recover_data_couples.add(couple_str)
 
         ts = int(time.time())
 
+        # XXX: rework, it is too expensive
         storage_couples = set(str(c) for c in storage.replicas_groupsets.keys())
-
         add_couples = list(storage_couples - recover_data_couples)
         remove_couples = list(recover_data_couples - storage_couples)
 
-        logger.info('Couples to add to recover data list: {0}'.format(add_couples))
-        logger.info('Couples to remove from recover data list: {0}'.format(remove_couples))
+        logger.info('Couples to add {}, couple to remove {}'.format(add_couples, remove_couples))
 
         offset = 0
+        OP_SIZE = 200
         while offset < len(add_couples):
             bulk_op = self.collection.initialize_unordered_bulk_op()
-            bulk_add_couples = add_couples[offset:offset + self.RECOVERY_OP_CHUNK]
+            bulk_add_couples = add_couples[offset:offset + OP_SIZE]
             for couple in bulk_add_couples:
-                bulk_op.insert({'couple': couple,
-                                'recover_ts': ts})
+                bulk_op.insert({'couple': couple, 'recover_ts': ts})
             res = bulk_op.execute()
             if res['nInserted'] != len(bulk_add_couples):
-                raise ValueError('failed to add couples recover data: {0}/{1} ({2})'.format(
+                raise ValueError('Failed to add couples recover data: {}/{} ({})'.format(
                     res['nInserted'], len(bulk_add_couples), res))
             offset += res['nInserted']
 
         offset = 0
         while offset < len(remove_couples):
             bulk_op = self.collection.initialize_unordered_bulk_op()
-            bulk_remove_couples = remove_couples[offset:offset + self.RECOVERY_OP_CHUNK]
+            bulk_remove_couples = remove_couples[offset:offset + OP_SIZE]
             bulk_op.find({'couple': {'$in': bulk_remove_couples}}).remove()
             res = bulk_op.execute()
             if res['nRemoved'] != len(bulk_remove_couples):
                 raise ValueError('failed to remove couples recover data: {0}/{1} ({2})'.format(
                     res['nRemoved'], len(bulk_remove_couples), res))
             offset += res['nRemoved']
+
+        self.history_data = history
 
     def update_recover_ts(self, couple_id, ts):
         ts = int(ts)
@@ -426,5 +410,8 @@ class Scheduler(object):
             {'couple': couple_id, 'recover_ts': ts},
             upsert=True)
         if res['ok'] != 1:
-            logger.error('Unexpected mongo response during recover ts update: {0}'.format(res))
-            raise RuntimeError('Mongo operation result: {0}'.format(res['ok']))
+            logger.error('Unexpected mongo response during recover ts update: {}'.format(res))
+            raise RuntimeError('Mongo operation result: {}'.format(res['ok']))
+
+        # update cached representation
+        self.history_data[couple_id] = {'recover_ts': ts}
