@@ -365,7 +365,8 @@ class Scheduler(object):
 
         for data_record in cursor:
             couple_str = data_record['couple']
-            history[couple_str] = {'recover_ts': data_record.get('recover_ts')}
+            history[couple_str] = {'recover_ts': data_record.get('recover_ts'),
+                                   'ttl_cleanup_ts': data_record.get('ttl_cleanup_ts')}
             recover_data_couples.add(couple_str)
 
         ts = int(time.time())
@@ -383,7 +384,8 @@ class Scheduler(object):
             bulk_op = self.collection.initialize_unordered_bulk_op()
             bulk_add_couples = add_couples[offset:offset + OP_SIZE]
             for couple in bulk_add_couples:
-                bulk_op.insert({'couple': couple, 'recover_ts': ts})
+                # these couples are new. No need to cleanup or recover
+                bulk_op.insert({'couple': couple, 'recover_ts': ts, 'ttl_cleanup_ts': ts})
             res = bulk_op.execute()
             if res['nInserted'] != len(bulk_add_couples):
                 raise ValueError('Failed to add couples recover data: {}/{} ({})'.format(
@@ -403,15 +405,37 @@ class Scheduler(object):
 
         self.history_data = history
 
-    def update_recover_ts(self, couple_id, ts):
-        ts = int(ts)
+
+    def update_historic_ts(self, couple_id, recover_ts=None, cleanup_ts=None):
+        """
+        Update records in mongo with corresponding times
+        :param couple_id: couple_id
+        :param recover_ts: epoch time if we need to update recover_ts time else None
+        :param cleanup_ts: epoch time if we need to update ttl_cleanup time else None
+        """
+
+        updated_values = {}
+        if recover_ts:
+            updated_values['recover_ts'] = int(recover_ts)
+        if cleanup_ts:
+            updated_values['ttl_cleanup_ts'] = int(cleanup_ts)
+
+        if len(updated_values) == 0:
+            return
+
         res = self.collection.update(
             {'couple': couple_id},
-            {'couple': couple_id, 'recover_ts': ts},
+            {"$set": updated_values},
             upsert=True)
         if res['ok'] != 1:
-            logger.error('Unexpected mongo response during recover ts update: {}'.format(res))
-            raise RuntimeError('Mongo operation result: {}'.format(res['ok']))
+            logger.error('Unexpected mongo response during update of historic data: {0}'.format(res))
+            raise RuntimeError('Mongo operation result: {0}'.format(res['ok']))
 
         # update cached representation
-        self.history_data[couple_id] = {'recover_ts': ts}
+        self.history_data[couple_id].update(updated_values)
+
+    def update_recover_ts(self, couple_id, ts):
+        self.update_historic_ts(couple_id, recover_ts=ts)
+
+    def update_cleanup_ts(self, couple_id, ts):
+        self.update_historic_ts(couple_id, cleanup_ts=ts)

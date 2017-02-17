@@ -4,6 +4,9 @@ from infrastructure import infrastructure
 import jobs
 from mastermind_core.config import config
 import storage
+import time
+import datetime
+from yt_worker import YqlWrapper
 
 
 logger = logging.getLogger('mm.sched.ttl_cleanup')
@@ -26,7 +29,6 @@ class TtlCleanupStarter(object):
             yt_attempts = self.params.get('ttl_cleanup', {}).get('yt_attempts', 3)
             yt_delay = self.params.get('ttl_cleanup', {}).get('yt_delay', 10)
 
-            from yt_worker import YqlWrapper
             yt_wrapper = YqlWrapper(cluster=yt_cluster, token=yt_token, attempts=yt_attempts, delay=yt_delay)
 
             aggregation_table = self.params.get('ttl_cleanup', {}).get('aggregation_table', "")
@@ -42,12 +44,52 @@ class TtlCleanupStarter(object):
             logger.exception("Work with YQL failed")
             return []
 
+    def _get_idle_groups(self, days_of_idle):
+        """
+        Iterates all over couples. Find couples where ttl_cleanup hasn't run for more than 'days of idle'
+        :param days_of_idle: how long the group could be idle
+        :return: list of groups[0] from couples
+        """
+
+        idle_groups = []
+
+        # the epoch time when executed jobs are considered meaningful
+        idleness_threshold = time.time() - datetime.timedelta(days=days_of_idle).total_seconds()
+
+        couples_data = self.planner.get_history()
+        # couples data is not sorted, so we need to iterate through it all.
+        # But it may be faster then creation of a sorted representation
+
+        for couple_id, couple_data in couples_data.iteritems():
+
+            # if couple_data doesn't contain cleanup_ts field then cleanup_ts has never been run on this couple
+            # and None < idleness_threshold
+            ts = couple_data.get('ttl_cleanup_ts')
+            if ts > idleness_threshold:
+                continue
+
+            # couple has format "gr0:gr1:...:grN". We are interested only in the group #0
+            idle_groups.append(int(couple_id.split(":")[0]))
+
+        return idle_groups
+
     def _do_ttl_cleanup(self):
         logger.info('Run ttl cleanup')
 
         job_params = []
 
-        couple_list = self._get_yt_stat()
+        allowed_idleness_period = config.get('jobs', {}).get('ttl_cleanup_job', {}).get(
+            'max_idle_days', 270)
+
+        # get couples where ttl_cleanup wasn't run for long time (or never)
+        time_group_list = self._get_idle_groups(days_of_idle=allowed_idleness_period)
+
+        # get information from mds-proxy Yt logs
+        yt_group_list = self._get_yt_stat()
+
+        # remove dups
+        couple_list = set(yt_group_list + time_group_list)
+
         for couple in couple_list:
 
             iter_group = couple  # in tskv coupld id is actually group[0] from couple id
