@@ -23,7 +23,6 @@ from timer import periodic_timer
 import os
 import re
 from history import GroupHistoryFinder
-from yt_worker import YqlWrapper
 
 import timed_queue
 
@@ -66,7 +65,7 @@ class Planner(object):
         self.ttl_cleanup_timer = periodic_timer(
             seconds=self.params.get('ttl_cleanup', {}).get('ttl_cleanup_period', 60 * 15))
         self.ttl_cleanup_yt_timer = periodic_timer(
-            seconds=self.params.get('ttl_cleanup', {}).get('yt_cleanup_period', 60 * 60 * 24 * 10)
+            seconds=self.params.get('ttl_cleanup', {}).get('yt_cleanup_period', 60 * 60 * 24 * 10)  # once per 10 days
         )
 
         if config['metadata'].get('planner', {}).get('db'):
@@ -120,15 +119,16 @@ class Planner(object):
             yt_attempts = self.params.get('ttl_cleanup', {}).get('yt_attempts', 3)
             yt_delay = self.params.get('ttl_cleanup', {}).get('yt_delay', 10)
 
+            from yt_worker import YqlWrapper
             yt_wrapper = YqlWrapper(cluster=yt_cluster, token=yt_token, attempts=yt_attempts, delay=yt_delay)
 
-            aggregation_table = self.params.get('ttl_cleanup', {}).get('aggregation_table', "")
+            aggregate_table = self.params.get('ttl_cleanup', {}).get('aggregation_table', "")
             base_table = self.params.get('ttl_cleanup', {}).get('tskv_log_table', "")
             expired_threshold = self.params.get('ttl_cleanup', {}).get('ttl_threshold', 10 * float(1024 ** 3))  # 10GB
 
-            yt_wrapper.prepare_aggregate_for_yesterday(base_table, aggregation_table)
+            yt_wrapper.prepare_aggregate_for_yesterday(base_table, aggregate_table)
 
-            couple_list = yt_wrapper.request_expired_stat(aggregation_table, expired_threshold)
+            couple_list = yt_wrapper.request_expired_stat(aggregate_table, expired_threshold)
             logger.info("YT request has completed")
             return couple_list
         except:
@@ -137,15 +137,15 @@ class Planner(object):
 
     def _ttl_cleanup_planner(self):
         try:
-            logger.info('Starting ttl cleanup planner')
+            logger.info('Starting TTL cleanup planner')
 
             with sync_manager.lock(Planner.TTL_CLEANUP_LOCK, blocking=False):
                 self._do_ttl_cleanup()
 
         except LockFailedError:
-            logger.info('TTl cleanup planner is already running')
+            logger.info('TTL cleanup planner or YT cleaner is already running')
         except Exception:
-            logger.exception('Failed to plan ttl cleanup')
+            logger.exception('Failed to plan TTL cleanup')
         finally:
             logger.info('TTL cleanup planner finished')
             self.__tq.add_task_at(
@@ -222,7 +222,7 @@ class Planner(object):
 
             ns_settings = self.namespaces_settings.get(group.couple.namespace.id)
             if ns_settings and not ns_settings.attributes.ttl.enable:
-                logger.debug("Skipping group {} cause ns '{}' no ttl".format(group_id, group.couple.namespace.id))
+                logger.debug("Skipping group {} cause ns '{}' has no ttl attr".format(group_id, group.couple.namespace.id))
                 continue
 
             # if couple_data doesn't contain cleanup_ts field then cleanup_ts has never been run on this couple
@@ -232,7 +232,7 @@ class Planner(object):
         logger.info("History of last run is of {} len".format(len(result)))
         return result
 
-    def _cleanup_aggregation_yt(self):
+    def _cleanup_aggregate_yt(self):
         """
         Cleanup YT aggregation table by removing outdated records (where outdated means their exp_date < ttl_last_run)
         :return:
@@ -248,36 +248,37 @@ class Planner(object):
         yt_attempts = self.params.get('ttl_cleanup', {}).get('yt_attempts', 3)
         yt_delay = self.params.get('ttl_cleanup', {}).get('yt_delay', 10)
 
+        from yt_worker import YqlWrapper
         yt_wrapper = YqlWrapper(cluster=yt_cluster, token=yt_token, attempts=yt_attempts, delay=yt_delay)
 
-        aggregation_table = self.params.get('ttl_cleanup', {}).get('aggregation_table', "")
+        aggregate_table = self.params.get('ttl_cleanup', {}).get('aggregation_table', "")
 
         ttl_hist = self._get_ttl_cleanup_last_run()
 
-        yt_wrapper.cleanup_aggregaton_table(aggregate_table=aggregation_table, couples_hist=ttl_hist)
+        yt_wrapper.cleanup_aggregate_table(aggregate_table=aggregate_table, couples_hist=ttl_hist)
 
         logger.info("Cleaning up YT is complete")
 
     def _ttl_yt_cleaner(self):
         try:
-            logger.info('Starting ttl yt cleaner')
+            logger.info('Starting YT cleaner')
 
             with sync_manager.lock(Planner.TTL_CLEANUP_LOCK, blocking=False):
-                self._cleanup_aggregation_yt()
+                self._cleanup_aggregate_yt()
 
         except LockFailedError:
-            logger.info('TTl cleanup planner or ttl yt cleaner is already running')
+            logger.info('TTL cleanup planner or YT cleaner is already running')
         except:
-            logger.exception('Failed to clean YT aggregation table')
+            logger.exception('Failed to clean YT aggregate table')
         finally:
-            logger.info('TTL YT cleaner finished')
+            logger.info('YT cleaner finished')
             self.__tq.add_task_at(
-                self.TTL_CLEANUP,
+                self.TTL_YT_CLEANUP,
                 self.ttl_cleanup_yt_timer.next(),
                 self._ttl_yt_cleaner)
 
     def _do_ttl_cleanup(self):
-        logger.info('Run ttl cleanup')
+        logger.info('Run TTL cleanup')
 
         max_cleanup_jobs = config.get('jobs', {}).get('ttl_cleanup_job', {}).get(
             'max_executing_jobs', 100)
@@ -305,7 +306,7 @@ class Planner(object):
 
         for iter_group in yt_group_list:
             if iter_group not in storage.groups:
-                logger.error("Not valid group is extracted from aggregation log {}".format(iter_group))
+                logger.error("Not valid group is extracted from aggregate log {}".format(iter_group))
                 continue
             iter_group = storage.groups[iter_group]
             if not iter_group.couple:
@@ -314,7 +315,7 @@ class Planner(object):
 
             ns_settings = self.namespaces_settings.get(iter_group.couple.namespace.id)
             if not ns_settings or not ns_settings.attributes.ttl.enable:
-                logger.debug("Skipping group {} cause ns '{}' without ttl".format(
+                logger.debug("Skipping group {} cause ns '{}' has no ttl attr".format(
                               iter_group.group_id, iter_group.couple.namespace.id))
                 continue
 
