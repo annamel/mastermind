@@ -273,6 +273,7 @@ GROUP BY
                 logger.error("couple {} not in couples_hist {}".format(couple_id, couples_hist))
                 continue
 
+            # Couples_hist[couple_id] may be None (if the couple was recovered but it was never
             if couples_hist[couple_id] >= expiration:
                 continue
 
