@@ -130,6 +130,47 @@ class Scheduler(object):
             res_demand = self.convert_resource_representation(job.resources, job._involved_groups, job.type)
             self.add_to_resource_stat(res_demand, job.id)
 
+    def get_busy_nodes_and_groups(self, demand):
+        """
+        Return a list of addresses of hosts that satisfy demand
+        :param a dict [res_type] == res_val
+        :return: list of nodes that doesn't have enough resources, list of busy groups
+        """
+
+        def default_res_counter():
+            return {
+                Job.RESOURCE_FS: 0,
+                Job.RESOURCE_HOST_IN: 0,
+                Job.RESOURCE_HOST_OUT: 0,
+                Job.RESOURCE_CPU: 0,
+                self.RESOURCE_GROUP: []
+            }
+
+        busy_groups = []
+
+        # rebuild representation
+        hosts = defaultdict(default_res_counter)
+        for res_desc, res_val in self.res.iteritems():
+            if res_desc[0] == self.RESOURCE_GROUP:
+                busy_groups.append(res_desc[2])
+                continue
+            # for disks collect all consumption into one variable
+            for consumer in res_val:
+                hosts[res_desc[1]][res_desc[0]] += consumer[0]
+
+        busy_hosts = []
+
+        for host_addr, host_res in hosts.iteritems():
+            for res_type, res_val in host_res.iteritems():
+                # RESOURCE_GROUP couldn't be present in demand
+                if res_type not in demand or demand[res_type] == 0:
+                    continue
+                if (res_val + demand[res_type]) > 100:
+                    busy_hosts.append(host_addr)
+                    break
+
+        return busy_hosts, busy_groups
+
     def convert_resource_representation(self, resources, groups, job_type):
         """
         The function takes old resources (equivalent to job.resources), "resources_limits" for each job type from config
@@ -138,13 +179,19 @@ class Scheduler(object):
         :param groups: List of groups ids
         :param job_type: job_type
         :param errors: list of strings
-        :return: a dict where keys are tuples (res_type, group) or (res_type, node_addr) or (res_type, node_addr, fs_id)
+        :return: a dict where keys are tuples (res_type, node_addr, group) or (res_type, node_addr) or (res_type, node_addr, fs_id)
                 and values are consumption level
         """
         res_demand = {}
 
-        for g in groups:
-            res_demand[(self.RESOURCE_GROUP, g)] = 100  # Assume that group is always 100% utilized
+        for gid in groups:
+            host_addr = 0
+            if gid in storage.groups:
+                if len(storage.groups[gid].node_backends) == 0:
+                    logger.warn("suspicious group without configured backends {}".format(storage.groups[gid]))
+                else:
+                    host_addr = storage.groups[gid].node_backends[0].node.host.addr
+            res_demand[(self.RESOURCE_GROUP, host_addr, gid)] = 100  # Assume that group is always 100% utilized
 
         for res_type, res_vals in resources.iteritems():
             for res_val in res_vals:

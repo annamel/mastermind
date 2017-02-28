@@ -442,3 +442,35 @@ class MoveJob(Job):
         updated_meta.pop('service', None)
 
         yield group.group_id, updated_meta
+
+
+    @staticmethod
+    def report_resources(params):
+        """
+        Report resources supposed usage for specified params
+        :param params: params to be passed on creating the job instance
+        :return: dict={'groups':[], 'resources':{ Job.RESOURCE_HOST_IN: [], etc}}
+        """
+        res = {}
+
+        # XXX: this code duplicates 'set_resources', 'involved_groups' methods but this duplication is chose
+        # to minimize changes to test
+        res['resources'] = {}
+        res['resources'][Job.RESOURCE_HOST_IN] = []
+        res['resources'][Job.RESOURCE_HOST_OUT] = []
+        res['resources'][Job.RESOURCE_FS] = []
+        res['groups'] = []
+
+        res['resources'][Job.RESOURCE_HOST_IN].append(params['dst_host'])
+        res['resources'][Job.RESOURCE_HOST_OUT].append(params['src_host'])
+
+        for gid in [params['uncoupled_group'], params['group']] + params['merged_groups']:
+            g = storage.groups[gid]
+            nb = g.node_backends[0]
+            res['groups'].append(gid)
+            res['resources'][Job.RESOURCE_FS].append((nb.node.host.addr, str(nb.fs.fsid)))
+
+        for gid in storage.groups[params['group']].couple.groups:
+            res['groups'].append(gid)
+
+        return res
