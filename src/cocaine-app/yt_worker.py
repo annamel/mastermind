@@ -248,12 +248,8 @@ GROUP BY
         except:
             logger.exception("Incorrect results of query {}".format(query))
 
-        records_to_remove = 0
-
         table.fetch_full_data()
         starting_time = time.time()
-
-        ins_query = "INSERT INTO [" + tmp_table_name + "] (" + ", ".join(cln[0] for cln in table.columns) + ") VALUES "
 
         couple_repr = ('couple_id', 'String')
         exp_repr = ('expiration_date', 'Uint64')
@@ -263,8 +259,9 @@ GROUP BY
         couple_idx = table.columns.index(couple_repr)
         exp_idx = table.columns.index(exp_repr)
 
-        # do not create a new dict for the sake of memory. do not modify table.row for the sake of performance
-        # instead create insertion request just in place
+        # list of lists of values
+        values_to_insert = []
+
         for row in table.rows:
             couple_id = int(row[couple_idx])
             expiration = int(row[exp_idx])
@@ -273,23 +270,30 @@ GROUP BY
                 logger.error("couple {} not in couples_hist {}".format(couple_id, couples_hist))
                 continue
 
-            # Couples_hist[couple_id] may be None (if the couple was recovered but it was never
             if couples_hist[couple_id] >= expiration:
                 continue
 
-            converting_func = lambda r, i: "CAST({} AS {})".format(r, table.columns[i][1]) \
-                if table.columns[i][1] != "String" else ("'" + str(r) + "'")
+            values_to_insert.append(row)
 
-            ins_query += "(" + ", ".join(converting_func(r, row.index(r)) for r in row) + "),"
-            records_to_remove += 1
-
-        ins_query = ins_query[:-1] + ";"
-
-        if records_to_remove == 0:
+        if len(values_to_insert) == 0:
             # no need to except: maybe cleanup of aggregate table run frequently due to test reasons
             # but anyway we'd better to notify of that
-            logger.warn("No outdated records in aggregate table were found (couples_hist {})".format(len(couples_hist)))
+            logger.warn(
+                "No outdated records in aggregate table were found (couples_hist {})".format(len(couples_hist)))
             return
+
+        def convertion(value, value_idx):
+            value_type = table.columns[value_idx][1]
+            if value_type == "String":
+                return "'{}'".format(value)  # add extra '
+            if value_type == "Uint64" or value_type == "Int64" or value_type == "Int32" or value_type == "Uint32":
+                return "CAST({} AS {})".format(value, value_type)
+            raise ValueError("Unsupported type in aggregation table")
+
+        ins_query = "INSERT INTO [{tmp_table_name}] ({values_names}) VALUES {values};".format(
+            tmp_table_name=tmp_table_name,
+            values_names=", ".join(cln[0] for cln in table.columns),
+            values=", ".join("({})".format(", ".join(convertion(r, row.index(r)) for r in row)) for row in values_to_insert))
 
         # We can drop old aggregate table and insert the new one at once (one request is protected by trans lock)
         # But delivering values from outside could take much longer then transferring values from one table into another
