@@ -218,8 +218,8 @@ def init_smart_scheduler(job_processor):
     from sched.ttl_cleanup_starter import TtlCleanupStarter
 
     scheduler = Scheduler(meta_db, job_processor)
-    defrag_starter = DefragStarter(job_processor, scheduler)
-    recovery_starter = RecoveryStarter(job_processor, scheduler)
+    defrag_starter = DefragStarter(scheduler)
+    recovery_starter = RecoveryStarter(scheduler)
     ttl_cleanup_starter = TtlCleanupStarter(scheduler)
     return scheduler
 
