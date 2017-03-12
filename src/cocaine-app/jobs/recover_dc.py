@@ -167,32 +167,34 @@ class RecoverDcJob(Job):
         """
         Report resources supposed usage for specified params
         :param params: params to be passed on creating the job instance
-        :return: dict={'groups':[], 'resources':{ Job.RESOURCE_HOST_IN: [], etc}}
+        :return: a dict where keys are tuples (res_type, group) or (res_type, node_addr) or (res_type, node_addr, fs_id)
+                and values are consumption level
         """
 
         # XXX: this code duplicates 'set_resources', 'involved_groups' methods but this duplication is chose
         # to minimize changes to test
         res = {}
+        groups = []
+
+        from mastermind_core.config import config
+        config_params = config.get('scheduler', {}).get('recover_dc', {})
+        resource_limits = config_params.get("resource_limits", {})  # common, no specific roles
 
         couple = params.get('couple')
         if couple:
-            res['groups'] = [int(gid) for gid in couple.split(':')]
+            groups = [gid in couple.split(':')]
         else:
             group_id = params.get('group')
             group = storage.groups[group_id]
             couple = group.couple
-            res['groups'] = [g.group_id for g in couple.groups]
+            groups = [g.group_id in couple.groups]
 
-        res['resources'] = {
-            Job.RESOURCE_HOST_IN: [],
-            Job.RESOURCE_HOST_OUT: [],
-            Job.RESOURCE_FS: [],
-        }
-
-        for group_id in res['groups']:
+        for group_id in groups:
+            res[("Group", group_id)] = 100
             g = storage.groups[group_id]
-            res['resources'][Job.RESOURCE_HOST_IN].append(g.node_backends[0].node.host.addr)
-            res['resources'][Job.RESOURCE_HOST_OUT].append(g.node_backends[0].node.host.addr)
-            res['resources'][Job.RESOURCE_FS].append((g.node_backends[0].node.host.addr, str(g.node_backends[0].fs.fsid)))
+            nb = g.node_backends[0]
+            res[(Job.RESOURCE_HOST_IN, nb.node.host.addr)] = resource_limits.get(Job.RESOURCE_HOST_IN, 20)
+            res[(Job.RESOURCE_HOST_OUT, nb.node.host.addr)] = resource_limits.get(Job.RESOURCE_HOST_OUT, 20)
+            res[(Job.RESOURCE_FS, nb.node.host.addr, str(nb.fs.fsid))] = 100
 
         return res

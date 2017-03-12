@@ -296,8 +296,7 @@ class Scheduler(object):
         for job_param in jobs_param_list:
 
             # Get resource demand and verify whether run is possible
-            old_res = job_report_resources(job_param)
-            res = self.convert_resource_representation(old_res['resources'], old_res['groups'], job_type)
+            res = job_report_resources(job_param)
 
             if not self.cancel_crossing_jobs(job_type, sched_params, res):
                 continue

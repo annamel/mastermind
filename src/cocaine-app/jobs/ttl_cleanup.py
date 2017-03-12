@@ -20,7 +20,7 @@ class TtlCleanupJob(Job):
         'nproc',
         'wait_timeout',
         'dry_run',
-        'remove_all_older',
+         'remove_all_older',
         'remove_permanent_older',
         'resources'
     )
@@ -110,12 +110,16 @@ class TtlCleanupJob(Job):
         """
         Report resources supposed usage for specified params
         :param params: params to be passed on creating the job instance
-        :return: dict={'groups':[], 'resources':{ Job.RESOURCE_HOST_IN: [], etc}}
+        :return: a dict where keys are tuples (res_type, group) or (res_type, node_addr) or (res_type, node_addr, fs_id)
+                and values are consumption level
         """
 
         # XXX: this code duplicates 'set_resources', 'involved_groups' methods but this duplication is chose
         # to minimize changes to test
         res = {}
+
+        from mastermind_core.config import config
+        config_params = config.get('scheduler', {}).get('ttl_cleanup', {})
 
         iter_group = params['iter_group']
 
@@ -124,11 +128,25 @@ class TtlCleanupJob(Job):
 
         couple = storage.groups[iter_group].couple
         nb = storage.groups[iter_group].node_backends[0]
-        res['resources'] = {}
-        res['resources'][Job.RESOURCE_HOST_IN] = []
-        res['resources'][Job.RESOURCE_FS] = []
-        res['resources'][Job.RESOURCE_HOST_IN].append(nb.node.host.addr)
-        res['resources'][Job.RESOURCE_FS].append((nb.node.host.addr, str(nb.fs.fsid)))
-        res['groups'] = [g.group_id for g in couple.groups]
+
+        for g in couple.groups:
+            res[("Group", g)] = 100  # lock all groups
+
+        resource_limits = config_params.get("resource_limits", {})
+        res[(Job.RESOURCE_HOST_IN, nb.node.host.addr)] = resource_limits.get(Job.RESOURCE_HOST_IN, 20)
+        res[(Job.RESOURCE_HOST_OUT, nb.node.host.addr)] = resource_limits.get(Job.RESOURCE_HOST_OUT, 2)
+        res[(Job.RESOURCE_FS, nb.node.host.addr, str(nb.fs.fsid))] = \
+            resource_limits.get(Job.RESOURCE_FS, 100)  # lock the entire disk
+
+        resource_limits = config_params.get("resource_limits_neighbour", {})
+        for g in couple.groups:
+            # skip iter group - it is already configured within resource_limits_main
+            if g == iter_group:
+                continue
+            nb = storage.groups[g].node_backends[0]
+            res[(Job.RESOURCE_HOST_IN, nb.node.host.addr)] = resource_limits.get(Job.RESOURCE_HOST_IN, 2)
+            res[(Job.RESOURCE_HOST_OUT, nb.node.host.addr)] = resource_limits.get(Job.RESOURCE_HOST_OUT, 5)
+            res[(Job.RESOURCE_FS, nb.node.host.addr, str(nb.fs.fsid))] = \
+                resource_limits.get(Job.RESOURCE_FS, 100)  # lock the entire disk
 
         return res

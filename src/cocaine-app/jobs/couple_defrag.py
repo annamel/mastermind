@@ -124,19 +124,22 @@ class CoupleDefragJob(Job):
         """
         Report resources supposed usage for specified params
         :param params: params to be passed on creating the job instance
-        :return: dict={'groups':[], 'resources':{ Job.RESOURCE_HOST_IN: [], etc}}
+        :return: a dict where keys are tuples (res_type, group) or (res_type, node_addr) or (res_type, node_addr, fs_id)
+                and values are consumption level
         """
 
         # XXX: this code duplicates 'set_resources', 'involved_groups' methods but this duplication is chose
         # to minimize changes to test
         res = {}
 
+        from mastermind_core.config import config
+        config_params = config.get('scheduler', {}).get('couple_defrag', {})
+        resource_limits = config_params.get("resource_limits", {})  # common, no specific roles
+
         couple = params.get('couple', '')
-        res['groups'] = [int(gid) for gid in couple.split(':')]
-        res['resources'] = {
-            Job.RESOURCE_FS: [],
-            Job.RESOURCE_CPU: [],
-        }
+        for gid in couple.split(':'):
+            res[("group", int(gid))] = 100  # Lock groups for a while
+
         couples = (storage.cache_couples
                    if params.get('is_cache_couple', False) else
                    storage.replicas_groupsets)
@@ -145,7 +148,7 @@ class CoupleDefragJob(Job):
         couple = couples[couple]
 
         for g in couple.groups:
-            res['resources'][Job.RESOURCE_FS].append(
-                (g.node_backends[0].node.host.addr, str(g.node_backends[0].fs.fsid)))
-            res['resources'][Job.RESOURCE_CPU].append(g.node_backends[0].node.host.addr)
+            res[(Job.RESOURCE_FS, g.node_backends[0].node.host.addr, str(g.node_backends[0].fs.fsid))] = 100
+            res[(Job.RESOURCE_CPU, g.node_backends[0].node.host.addr)] = resource_limits.get(Job.RESOURCE_CPU, 25)
+
         return res
