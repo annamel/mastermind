@@ -247,6 +247,7 @@ GROUP BY
             table = next(x for x in r.results)
         except:
             logger.exception("Incorrect results of query {}".format(query))
+            return
 
         table.fetch_full_data()
         starting_time = time.time()
@@ -286,14 +287,14 @@ GROUP BY
             value_type = table.columns[value_idx][1]
             if value_type == "String":
                 return "'{}'".format(value)  # add extra '
-            if value_type == "Uint64" or value_type == "Int64" or value_type == "Int32" or value_type == "Uint32":
+            if value_type in ("Uint64", "Int64", "Int32", "Uint32"):
                 return "CAST({} AS {})".format(value, value_type)
-            raise ValueError("Unsupported type in aggregation table")
+            raise ValueError("Unsupported type {} at index {} in aggregation table".format(value_type, value_idx))
 
         ins_query = "INSERT INTO [{tmp_table_name}] ({values_names}) VALUES {values};".format(
             tmp_table_name=tmp_table_name,
             values_names=", ".join(cln[0] for cln in table.columns),
-            values=", ".join("({})".format(", ".join(convertion(r, row.index(r)) for r in row)) for row in values_to_insert))
+            values=", ".join("({})".format(", ".join(convertion(r, i) for i, r in enumerate(row))) for row in values_to_insert))
 
         # We can drop old aggregate table and insert the new one at once (one request is protected by trans lock)
         # But delivering values from outside could take much longer then transferring values from one table into another
