@@ -17,9 +17,8 @@ class MoveStarter(object):
 
         self.scheduler = scheduler
         self.params = config.get('scheduler', {}).get('move', {})
-        scheduler.register_periodic_func(self._do_move,
-                                         period_default=1800,  # one per half an hour
-                                         starter_name="move")
+        move_period = self.params.get('move_period', 1800)  # one per half an hour
+        scheduler.register_periodic_func(self._do_move, period_val=move_period, starter_name="move")
 
     def _prepare_dc_stat(self):
 
@@ -98,12 +97,20 @@ class MoveStarter(object):
 
         return dcs
 
+    class DstCandidate(object):
+        def __init__(self, avail, group_id):
+            self.avail = avail
+            self.group_id = group_id
+
+        def __lt__(self, avail):
+            return self.avail < avail
+
     def _do_move(self):
         """
         Source group of move operation must satisfy the following requirements:
         - the host must have enough res
-        - the host must belong to DC that have uncoupled_percentage < avg and > max
-        - the group must be FULL
+        - the host must belong to DC that have uncoupled_percentage < avg and < max
+        - the groupset must be FULL
 
         Destination group of move operation must meet the following expectations:
         - the group must be uncoupled
@@ -112,7 +119,7 @@ class MoveStarter(object):
         - the host must belong to DC that have uncoupled_percentage > min
 
         Pair of dst+src must satisfy the following conditions:
-        - coupled groups of src should not belong to dst datacenter
+        - coupled groups of src should not belong to dst DC
         - dst DC uncoupled space < src DC uncoupled space
         :return:
         """
@@ -125,7 +132,7 @@ class MoveStarter(object):
 
         host_in_demand = {}
         host_in_demand[jobs.Job.RESOURCE_HOST_IN] = 100/max(move_jobs_limits.get(jobs.Job.RESOURCE_HOST_IN, 1), 1)
-        host_in_notcandidates = self.scheduler.get_busy_nodes_and_groups(host_in_demand)
+        host_in_notcandidates, busy_groups = self.scheduler.get_busy_nodes_and_groups(host_in_demand)
 
         dcs_stat = self._prepare_dc_stat()
 
@@ -209,7 +216,7 @@ class MoveStarter(object):
                         continue
 
                     avail = dst_dc_val["uncoupled_space_per_fs"][nb.fs.fsid]
-                    dst_candidates.append((avail, group.group_id))
+                    dst_candidates.append(self.DstCandidate(avail, group.group_id))
 
                 dst_candidates = sorted(dst_candidates, reverse=True)  # sort by avail space
 
@@ -221,13 +228,16 @@ class MoveStarter(object):
                 for group in filtered_src_groups:
                     src_total_space = storage.groups[group].get_stat().total_space
 
-                    # Find leftmost item greater than or equal to src_total_space
+                    # Find leftmost item greater than or equal to src_total_space.
+                    # bisect is not appliable here,
                     i = bisect.bisect_left(dst_candidates, src_total_space)
                     if i == len(dst_candidates):
                         # No suitable candidates are found
                         continue
 
-                    dst_group = dst_candidates[i][1]
+                    assert dst_candidates[i].avail >= src_total_space
+
+                    dst_group = dst_candidates[i].group_id
 
                     params.append({
                         'group': group.group_id,

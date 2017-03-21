@@ -470,7 +470,9 @@ class MoveJob(Job):
             res['groups'].append(gid)
             res['resources'][Job.RESOURCE_FS].append((nb.node.host.addr, str(nb.fs.fsid)))
 
-        for gid in storage.groups[params['group']].couple.groups:
-            res['groups'].append(gid)
+        for group in storage.groups[params['group']].couple.groups:
+            res['groups'].append(group.group_id)
+
+        assert(all(type(gid) == int for gid in res['groups']))
 
         return res

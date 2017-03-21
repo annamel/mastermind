@@ -216,7 +216,7 @@ def init_smart_scheduler(job_processor):
     from sched.defrag_starter import DefragStarter
     from sched.recover_starter import RecoveryStarter
     from sched.ttl_cleanup_starter import TtlCleanupStarter
-    from sched.move_planner import MoveStarter
+    from sched.move_starter import MoveStarter
 
     scheduler = Scheduler(meta_db, job_processor)
     defrag_starter = DefragStarter(scheduler)
