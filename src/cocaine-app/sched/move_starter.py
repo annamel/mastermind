@@ -6,6 +6,7 @@ import jobs
 from mastermind_core.config import config
 from mastermind_core import helpers
 import storage
+from infrastructure import infrastructure
 
 
 logger = logging.getLogger('mm.sched.move')
@@ -20,14 +21,14 @@ class MoveStarter(object):
         move_period = self.params.get('move_period', 1800)  # one per half an hour
         scheduler.register_periodic_func(self._do_move, period_val=move_period, starter_name="move")
 
-    def _prepare_dc_stat(self):
+    def _prepare_dc_stat(self, busy_group_ids):
 
         def default_dc():
             return {
                 "total_space": 0,
-                "uncoupled_space": 0,
+                "uncoupled_space": 0,  # space occupied by uncoupled groups
                 "valid_as_source": False,
-                "unc_percentage": 0,  # percent of uncoupled space
+                "unc_percentage": 0,  # percent of space occupied by uncoupled groups
                 "full_groups": [],
                 "uncoupled_groups": [],
                 "uncoupled_space_per_fs": Counter()  # d[fs]=volume
@@ -35,7 +36,12 @@ class MoveStarter(object):
 
         dcs = defaultdict(default_dc)
         total_space = 0
-        uncoupled_space = 0
+        uncoupled_space = 0  # space occupied by uncoupled groups
+
+        good_uncoupled_groups = set(infrastructure.get_good_uncoupled_groups(
+            max_node_backends=1,
+            skip_groups=busy_group_ids,
+        ))
 
         # enumerate all groups
         for group in storage.groups.keys():
@@ -52,7 +58,8 @@ class MoveStarter(object):
                     dcs[dc]["uncoupled_space"] += nb.stat.total_space
                     uncoupled_space += nb.stat.total_space
                     dcs[dc]["uncoupled_space_per_fs"][nb.fs.fsid] += nb.stat.total_space
-                    dcs[dc]["uncoupled_groups"].append(group)
+                    if group in good_uncoupled_groups:
+                        dcs[dc]["uncoupled_groups"].append(group)
 
                 elif group.type == storage.Group.TYPE_DATA:
 
@@ -124,17 +131,17 @@ class MoveStarter(object):
         :return:
         """
 
-        move_jobs_limits = self.params.get(jobs.JobTypes.TYPE_MOVE_JOB, {}).get('resources_limits', {})
+        move_jobs_limits = config.get('jobs', {}).get(jobs.JobTypes.TYPE_MOVE_JOB, {}).get('resources_limits', {})
 
         host_out_demand = {}
         host_out_demand[jobs.Job.RESOURCE_HOST_OUT] = 100/max(move_jobs_limits.get(jobs.Job.RESOURCE_HOST_OUT, 1), 1)
-        host_out_notcandidates, busy_groups = self.scheduler.get_busy_nodes_and_groups(host_out_demand)
+        host_out_notcandidates, busy_group_ids = self.scheduler.get_busy_nodes_and_groups(host_out_demand)
 
         host_in_demand = {}
         host_in_demand[jobs.Job.RESOURCE_HOST_IN] = 100/max(move_jobs_limits.get(jobs.Job.RESOURCE_HOST_IN, 1), 1)
-        host_in_notcandidates, busy_groups = self.scheduler.get_busy_nodes_and_groups(host_in_demand)
+        host_in_notcandidates, busy_group_ids = self.scheduler.get_busy_nodes_and_groups(host_in_demand)
 
-        dcs_stat = self._prepare_dc_stat()
+        dcs_stat = self._prepare_dc_stat(busy_group_ids=busy_group_ids)
 
         # list of dict params for jobs we are trying to create
         params = []
@@ -154,7 +161,7 @@ class MoveStarter(object):
                     continue
 
                 # if the group is busy, let's skip it
-                if group in busy_groups:
+                if group.group_id in busy_group_ids:
                     continue
 
                 src_groups.append(group)
@@ -184,10 +191,13 @@ class MoveStarter(object):
                         len(src_groups), src_dc, dst_dc))
                     continue
 
-                logger.info("Filtered {} out of {} for dc {}".format(len(filtered_src_groups), len(src_groups), src_dc))
+                logger.info("Filtered {} out of {} src for dc {}".format(
+                    len(filtered_src_groups), len(src_groups), src_dc))
+
+                uncoupled_sensitivity = self.params.get('uncoupled_diff_sensitive_percent', 2)
 
                 # we are interested in more or less equal of uncoupled space among DC
-                if dst_dc_val["unc_percentage"] > src_unc_percentage:
+                if dst_dc_val["unc_percentage"] > (src_unc_percentage + uncoupled_sensitivity):
                     logger.info('Skip dst dc {} since its unc_percentage ({}) < src ({})'.format(
                         dst_dc, dst_dc_val["unc_percentage"], src_unc_percentage))
                     continue
@@ -221,9 +231,14 @@ class MoveStarter(object):
                 dst_candidates = sorted(dst_candidates, reverse=True)  # sort by avail space
 
                 if len(dst_candidates) == 0:
-                    logger.info("No dst candidates for move within dc {} (uncoupled = {})".format(
-                        dst_dc, len(dst_dc_val["uncoupled_groups"])))
+                    logger.info("No dst candidates for move within dc {} (uncoupled = {}, hostinnot = {})".format(
+                        dst_dc, len(dst_dc_val["uncoupled_groups"]), len(host_in_notcandidates)))
                     continue
+
+                # greedy first for better matching
+                filtered_src_groups = sorted(filtered_src_groups,
+                                             key=lambda x: storage.groups[x].get_stat().total_space,
+                                             reverse=True)
 
                 for group in filtered_src_groups:
                     src_total_space = storage.groups[group].get_stat().total_space
@@ -233,26 +248,49 @@ class MoveStarter(object):
                     i = bisect.bisect_left(dst_candidates, src_total_space)
                     if i == len(dst_candidates):
                         # No suitable candidates are found
+                        logger.info("For candidate {} with needed space {} from dc {} no dst in dc {}".format(
+                            group.group_id, helpers.convert_bytes(src_total_space), src_dc, dst_dc))
                         continue
 
-                    assert dst_candidates[i].avail >= src_total_space
+                    dst_candidate = dst_candidates[i]
 
-                    dst_group = dst_candidates[i].group_id
+                    assert dst_candidate.avail >= src_total_space
+
+                    dst_group_id = dst_candidate.group_id
+                    dst_group = storage.groups[dst_group_id]
+
+                    # no need to find another pair for specified src. and do not use dst for the another src
+                    src_groups.remove(group)
+                    dst_dc_val['uncoupled_groups'].remove(dst_group)
+                    dst_candidates.remove(dst_candidate)
+                    # update stat ('valid_as_src' could be updated as well, but it is too expensive)
+                    dst_dc_val["uncoupled_space"] -= dst_candidate.avail
+                    dst_dc_val["uncoupled_space_per_fs"][dst_group.node_backends[0].fs.fsid] -= dst_candidate.avail
+                    dst_dc_val["unc_percentage"] = float(dst_dc_val["uncoupled_space"])/dst_dc_val["total_space"]
+                    src_dc_val["full_groups"].remove(group)
+
+                    assert dst_group.node_backends[0].node.host.dc == dst_dc
+                    assert group.node_backends[0].node.host.dc == src_dc
+                    assert src_dc != dst_dc
+                    assert group.node_backends[0].stat.total_space >= src_total_space
+                    assert not (dst_group_id in busy_group_ids or group.group_id in busy_group_ids)
+
+                    logger.info("Dst = {} from {}; src = {} from {}".format(dst_group, dst_dc, group.group_id, src_dc))
 
                     params.append({
                         'group': group.group_id,
-                        'uncoupled_group': dst_group,
+                        'uncoupled_group': dst_group_id,
                         'merged_groups': [],  #Fixup
                         'src_host': group.node_backends[0].node.host.addr,
                         'src_port': group.node_backends[0].node.port,
                         'src_family': group.node_backends[0].node.family,
                         'src_backend_id': group.node_backends[0].backend_id,
                         'src_base_path': group.node_backends[0].base_path,
-                        'dst_host': storage.groups[dst_group].node_backends[0].node.host.addr,
-                        'dst_port': storage.groups[dst_group].node_backends[0].node.port,
-                        'dst_family': storage.groups[dst_group].node_backends[0].node.family,
-                        'dst_backend_id': storage.groups[dst_group].node_backends[0].backend_id,
-                        'dst_base_path': storage.groups[dst_group].node_backends[0].base_path
+                        'dst_host': dst_group.node_backends[0].node.host.addr,
+                        'dst_port': dst_group.node_backends[0].node.port,
+                        'dst_family': dst_group.node_backends[0].node.family,
+                        'dst_backend_id': dst_group.node_backends[0].backend_id,
+                        'dst_base_path': dst_group.node_backends[0].base_path
                     })
 
         # sort params to select "best plans" (first ones are more possible to be executed)
