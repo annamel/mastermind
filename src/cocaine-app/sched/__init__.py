@@ -78,7 +78,7 @@ class Scheduler(object):
 
         def _starter_periodic_func():
             try:
-                logger.info('Starting {}'.format(starter_name))
+                logger.info('Starting starter {}'.format(starter_name))
 
                 with sync_manager.lock(lock_name, blocking=False):
                     starter_func()
@@ -86,9 +86,9 @@ class Scheduler(object):
             except LockFailedError:
                 logger.info('Another {} is already running under {} lock'.format(starter_name, lock_name))
             except:
-                logger.exception('Failed to {}'.format(starter_name))
+                logger.exception('Failed to execute starter {}'.format(starter_name))
             finally:
-                logger.info('{} finished'.format(starter_name))
+                logger.info('Starter {} has finished'.format(starter_name))
                 self.__tq.add_task_at(
                     starter_name,
                     timer.next(),
@@ -130,33 +130,51 @@ class Scheduler(object):
             res_demand = self.convert_resource_representation(job.resources, job._involved_groups, job.type)
             self.add_to_resource_stat(res_demand, job.id)
 
-    def get_busy_nodes_and_groups(self, demand):
+        logger.info("Active jobs are {}".format([(job.id, job.type) for job in active_jobs]))
+        logger.info("Resources are {}".format(self.res))
+
+    def get_busy_group_ids(self):
         """
-        Return a list of addresses of hosts that satisfy demand
+        Return a list of busy groups ids
+        :return:
+        """
+
+        busy_group_ids = []
+
+        for res_desc, res_val in self.res.iteritems():
+            res_type, res_id = res_desc[0], res_desc[1]
+            if res_type == self.RESOURCE_GROUP:
+                busy_group_ids.append(res_id)
+
+        return busy_group_ids
+
+    def get_busy_hosts(self, demand):
+        """
+        Return a list of addresses of hosts that doesn't satisfy the demand
         :param a dict [res_type] == res_val
-        :return: list of nodes that doesn't have enough resources, list of busy groups
+        :return: list of hosts that doesn't have enough resources
         """
 
         def default_res_counter():
             return {
-                Job.RESOURCE_FS: 0,
+                Job.RESOURCE_FS: Counter(),
                 Job.RESOURCE_HOST_IN: 0,
                 Job.RESOURCE_HOST_OUT: 0,
                 Job.RESOURCE_CPU: 0,
                 self.RESOURCE_GROUP: []
             }
 
-        busy_groups = []
-
         # rebuild representation
         hosts = defaultdict(default_res_counter)
         for res_desc, res_val in self.res.iteritems():
-            if res_desc[0] == self.RESOURCE_GROUP:
-                busy_groups.append(res_desc[2])
-                continue
-            # for disks collect all consumption into one variable
+            res_type, res_id = res_desc[0], res_desc[1]
+
             for consumer in res_val:
-                hosts[res_desc[1]][res_desc[0]] += consumer[0]
+                res_consumption = consumer[0]
+                if res_type == Job.RESOURCE_FS:
+                    hosts[res_id][res_type][res_desc[2]] += res_consumption
+                    continue
+                hosts[res_id][res_type] += res_consumption
 
         busy_hosts = []
 
@@ -169,7 +187,7 @@ class Scheduler(object):
                     busy_hosts.append(host_addr)
                     break
 
-        return busy_hosts, busy_groups
+        return busy_hosts
 
     def convert_resource_representation(self, resources, groups, job_type):
         """
@@ -179,24 +197,18 @@ class Scheduler(object):
         :param groups: List of groups ids
         :param job_type: job_type
         :param errors: list of strings
-        :return: a dict where keys are tuples (res_type, node_addr, group) or (res_type, node_addr) or (res_type, node_addr, fs_id)
+        :return: a dict where keys are tuples (res_type, group) or (res_type, node_addr) or (res_type, node_addr, fs_id)
                 and values are consumption level
         """
         res_demand = {}
 
         for gid in groups:
-            host_addr = 0
-            if gid in storage.groups:
-                if len(storage.groups[gid].node_backends) == 0:
-                    logger.warn("suspicious group without configured backends {}".format(storage.groups[gid]))
-                else:
-                    host_addr = storage.groups[gid].node_backends[0].node.host.addr
-            res_demand[(self.RESOURCE_GROUP, host_addr, gid)] = 100  # Assume that group is always 100% utilized
+            res_demand[(self.RESOURCE_GROUP, gid)] = 100  # Assume that group is always 100% utilized
 
         for res_type, res_vals in resources.iteritems():
             for res_val in res_vals:
                 if res_type in (Job.RESOURCE_CPU, Job.RESOURCE_HOST_IN, Job.RESOURCE_HOST_OUT):
-                    # Percent of resource consumed. 1..100 (zero is not valid since otherwise the resource is not consumed)
+                    # Percent of resource consumed. 1..100 (zero is not valid == the resource is not consumed)
                     consumption = 100 / max(self.res_limits[job_type][res_type], 1)
                     res_demand[(res_type, res_val)] = consumption
                 elif res_type == Job.RESOURCE_FS:
@@ -217,6 +229,24 @@ class Scheduler(object):
         for r, d in res_demand.iteritems():
             self.res[r].append((d, job_id))
 
+    def _process_lock_exception(self, msg, exc):
+
+        try:
+            holder_id = str(exc).split()[-1]
+            try:
+                holder_id = int(holder_id)
+            except ValueError:
+                return
+
+            holder_jobs = self.job_processor.job_finder.jobs(ids=[holder_id], sort=False)
+            if len(holder_jobs) == 0:
+                logger.error("{}: intercrossing with unknown job {}".format(msg, holder_id))
+                return
+
+            logger.error("{}: intercrossing with {}".format(msg, holder_jobs[0]))
+        except:
+            logger.exception("Error while trying to process lock exc {}".format(exc))
+
     def cancel_crossing_jobs(self, job_type, sched_params, demand):
         """
         Try to cancel jobs that are concurrent with a job we are trying to create (if there are some)
@@ -236,6 +266,7 @@ class Scheduler(object):
         # get a list of jobs crossing with the planned one based on resource demand
         job_ids = []
         for r in demand:
+            # v[1] is either host addr or group id
             job_ids.extend([v[1] for v in self.res[r]])
 
         if len(job_ids) == 0:
@@ -295,10 +326,16 @@ class Scheduler(object):
 
         # XXX: Now we cancel all jobs while we may be satisfied with less amount. Fix that
 
+        jobs_to_cancel = filter(lambda x: x.id in cancellable_jobs_ids, existing_jobs)
         try:
-            self.job_processor.stop_jobs_list(filter(lambda x: x.id in cancellable_jobs_ids, existing_jobs))
+            self.job_processor.stop_jobs_list(jobs_to_cancel)
+        except LockAlreadyAcquiredError as e:
+            logger.exception("Failed to cancel jobs {}".format(jobs_to_cancel))
+            self._process_lock_exception("Failed to cancel", e)
+            return False
+
         except:
-            logger.exception("Failed to cancel jobs {}".format(cancellable_jobs_ids))
+            logger.exception("Failed to cancel jobs {}".format(jobs_to_cancel))
             return False
 
         logger.info("Successfully cancelled {}".format(cancellable_jobs_ids))
@@ -355,7 +392,9 @@ class Scheduler(object):
                         force=False)
 
             except LockAlreadyAcquiredError as e:
-                logger.error("Failed to create a new job {} since couple/group are already locked {}".format(job_type, e))
+                logger.exception("Failed to create a new job {} since couple/group are already locked".format(job_type))
+                self._process_lock_exception("Failed to create", e)
+
                 # update resource stat, something has changed in the cluster or there is an error in the scheduler
                 self.update_resource_stat()
                 continue

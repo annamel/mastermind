@@ -7,6 +7,7 @@ from mastermind_core.config import config
 from mastermind_core import helpers
 import storage
 from infrastructure import infrastructure
+from errors import CacheUpstreamError
 
 
 logger = logging.getLogger('mm.sched.move')
@@ -34,7 +35,7 @@ class MoveStarter(object):
                 "uncoupled_space_per_fs": Counter()  # d[fs]=volume
             }
 
-        dcs = defaultdict(default_dc)
+        dcs_stat = defaultdict(default_dc)
         total_space = 0
         uncoupled_space = 0  # space occupied by uncoupled groups
 
@@ -49,17 +50,23 @@ class MoveStarter(object):
                 if nb.stat is None:
                     continue
 
-                dc = nb.node.host.dc
+                try:
+                    dc = nb.node.host.dc
+                except CacheUpstreamError:
+                    continue
 
-                dcs[dc]["total_space"] += nb.stat.total_space
+                dcs_stat[dc]["total_space"] += nb.stat.total_space
                 total_space += nb.stat.total_space
 
                 if group.type == storage.Group.TYPE_UNCOUPLED:
-                    dcs[dc]["uncoupled_space"] += nb.stat.total_space
+                    if group not in good_uncoupled_groups:
+                        continue
+
+                    dcs_stat[dc]["uncoupled_space"] += nb.stat.total_space
                     uncoupled_space += nb.stat.total_space
-                    dcs[dc]["uncoupled_space_per_fs"][nb.fs.fsid] += nb.stat.total_space
-                    if group in good_uncoupled_groups:
-                        dcs[dc]["uncoupled_groups"].append(group)
+                    dcs_stat[dc]["uncoupled_space_per_fs"][(nb.node.host.addr, nb.fs.fsid)] += nb.stat.total_space
+
+                    dcs_stat[dc]["uncoupled_groups"].append(group)
 
                 elif group.type == storage.Group.TYPE_DATA:
 
@@ -76,54 +83,46 @@ class MoveStarter(object):
                     if any(len(g.node_backends) > 1 for g in group.couple.groups):
                         continue
 
-                    dcs[dc]["full_groups"].append(group)
+                    dcs_stat[dc]["full_groups"].append(group)
 
         avg_unc_percentage = float(uncoupled_space) / total_space
 
-        for dc_name, dc in dcs.iteritems():
-            unc_percent = float(dc["uncoupled_space"])/dc["total_space"]
-            dc["unc_percentage"] = unc_percent
+        for dc, dc_val in dcs_stat.iteritems():
+            unc_percentage = float(dc_val["uncoupled_space"])/dc_val["total_space"]
+            dc_val["unc_percentage"] = unc_percentage
 
-            if unc_percent > avg_unc_percentage:
+            if unc_percentage > avg_unc_percentage:
                 logger.info(
                     'Source dc "{}": skipped, uncoupled percentage {} > {} (avg)'.format(
-                        dc_name, helpers.percent(unc_percent), helpers.percent(avg_unc_percentage))
+                        dc, helpers.percent(unc_percentage), helpers.percent(avg_unc_percentage))
                 )
                 continue
 
             uncoupled_space_max = self.params.get('uncoupled_space_max_bytes', 0)
-            unc = dc["uncoupled_space"]
+            unc = dc_val["uncoupled_space"]
             if uncoupled_space_max and unc > uncoupled_space_max:
                 logger.info(
                     'Source dc "{}": skipped, uncoupled space {} > {}'.format(
-                        dc_name, helpers.convert_bytes(unc), helpers.convert_bytes(uncoupled_space_max))
+                        dc, helpers.convert_bytes(unc), helpers.convert_bytes(uncoupled_space_max))
                 )
                 continue
 
-            dc["valid_as_source"] = True
+            dc_val["valid_as_source"] = True
 
-        return dcs
-
-    class DstCandidate(object):
-        def __init__(self, avail, group_id):
-            self.avail = avail
-            self.group_id = group_id
-
-        def __lt__(self, avail):
-            return self.avail < avail
+        return dcs_stat
 
     def _do_move(self):
         """
         Source group of move operation must satisfy the following requirements:
         - the host must have enough res
-        - the host must belong to DC that have uncoupled_percentage < avg and < max
+        - the host must belong to DC that have uncoupled_percentage < avg and < a maximum uncoupled space (config value)
         - the groupset must be FULL
 
         Destination group of move operation must meet the following expectations:
         - the group must be uncoupled
         - it should have enough uncoupled space on fs
         - the host must have enough res
-        - the host must belong to DC that have uncoupled_percentage > min
+        - the host must belong to DC that have uncoupled_percentage > a minimum of uncoupled space (config value)
 
         Pair of dst+src must satisfy the following conditions:
         - coupled groups of src should not belong to dst DC
@@ -135,11 +134,13 @@ class MoveStarter(object):
 
         host_out_demand = {}
         host_out_demand[jobs.Job.RESOURCE_HOST_OUT] = 100/max(move_jobs_limits.get(jobs.Job.RESOURCE_HOST_OUT, 1), 1)
-        host_out_notcandidates, busy_group_ids = self.scheduler.get_busy_nodes_and_groups(host_out_demand)
+        host_out_notcandidates = self.scheduler.get_busy_hosts(host_out_demand)
 
         host_in_demand = {}
         host_in_demand[jobs.Job.RESOURCE_HOST_IN] = 100/max(move_jobs_limits.get(jobs.Job.RESOURCE_HOST_IN, 1), 1)
-        host_in_notcandidates, busy_group_ids = self.scheduler.get_busy_nodes_and_groups(host_in_demand)
+        host_in_notcandidates = self.scheduler.get_busy_hosts(host_in_demand)
+
+        busy_group_ids = self.scheduler.get_busy_group_ids()
 
         dcs_stat = self._prepare_dc_stat(busy_group_ids=busy_group_ids)
 
@@ -170,34 +171,28 @@ class MoveStarter(object):
                 logger.info("No src groups within dc {} (full len = {})".format(src_dc, len(src_dc_val["full_groups"])))
                 continue
 
+            # greedy first for better matching. This sorting is done once per DC while list still to be filtered out
+            # for each certain DC that meet requirements
+            # XXX: May be storing in SortedContainers would be more effective
+            src_groups = sorted(src_groups, key=lambda x: x.get_stat().total_space, reverse=True)
+
             # uncoupled percentage within the DC
             src_unc_percentage = src_dc_val["unc_percentage"]
 
-            # we need only those groups that doesn't have a coupled group in the target DC
-            filter_coupled = lambda x: not any(int(gid) in storage.groups
-                                               and storage.groups[int(gid)] in dst_dc_val["full_groups"]
-                                               for gid in str(x.couple).split(':'))
+            # DC with greater amount of uncoupled space are better candidates for destination of migration
+            dst_dcs_stat = sorted(dcs_stat, key=lambda x: x["uncoupled_space"], reverse=True)
 
             # suitable dst dc
-            for dst_dc, dst_dc_val in dcs_stat.iteritems():
+            for dst_dc, dst_dc_val in dst_dcs_stat.iteritems():
 
                 if dst_dc == src_dc:
                     # they would be filtered anyway while creating filtered_src_groups but let's avoid extra work
                     continue
 
-                filtered_src_groups = filter(filter_coupled, src_groups)
-                if len(filtered_src_groups) == 0:
-                    logger.info("After filtering src groups nothing has left(was {}). skip {} {} pair".format(
-                        len(src_groups), src_dc, dst_dc))
-                    continue
-
-                logger.info("Filtered {} out of {} src for dc {}".format(
-                    len(filtered_src_groups), len(src_groups), src_dc))
-
-                uncoupled_sensitivity = self.params.get('uncoupled_diff_sensitive_percent', 2)
+                uncoupled_sensitivity = self.params.get('uncoupled_diff_sensitive_percent', 1)
 
                 # we are interested in more or less equal of uncoupled space among DC
-                if dst_dc_val["unc_percentage"] > (src_unc_percentage + uncoupled_sensitivity):
+                if dst_dc_val["unc_percentage"] < (src_unc_percentage + float(uncoupled_sensitivity)/100):
                     logger.info('Skip dst dc {} since its unc_percentage ({}) < src ({})'.format(
                         dst_dc, dst_dc_val["unc_percentage"], src_unc_percentage))
                     continue
@@ -217,16 +212,12 @@ class MoveStarter(object):
                 dst_candidates = []
                 for group in dst_dc_val["uncoupled_groups"]:
 
-                    # doesn't satisfy resources
-                    if len(group.node_backends) == 0:
-                        continue
-
                     nb = group.node_backends[0]
                     if nb.node.host.addr in host_in_notcandidates:
                         continue
 
-                    avail = dst_dc_val["uncoupled_space_per_fs"][nb.fs.fsid]
-                    dst_candidates.append(self.DstCandidate(avail, group.group_id))
+                    avail = dst_dc_val["uncoupled_space_per_fs"][(nb.node.host.addr, nb.fs.fsid)]
+                    dst_candidates.append((avail, group.group_id))
 
                 dst_candidates = sorted(dst_candidates, reverse=True)  # sort by avail space
 
@@ -235,45 +226,56 @@ class MoveStarter(object):
                         dst_dc, len(dst_dc_val["uncoupled_groups"]), len(host_in_notcandidates)))
                     continue
 
-                # greedy first for better matching
-                filtered_src_groups = sorted(filtered_src_groups,
-                                             key=lambda x: storage.groups[x].get_stat().total_space,
-                                             reverse=True)
+                for group in src_groups:
 
-                for group in filtered_src_groups:
-                    src_total_space = storage.groups[group].get_stat().total_space
-
-                    # Find leftmost item greater than or equal to src_total_space.
-                    # bisect is not appliable here,
-                    i = bisect.bisect_left(dst_candidates, src_total_space)
-                    if i == len(dst_candidates):
-                        # No suitable candidates are found
-                        logger.info("For candidate {} with needed space {} from dc {} no dst in dc {}".format(
-                            group.group_id, helpers.convert_bytes(src_total_space), src_dc, dst_dc))
+                    # Skip this group since it already have a coupled group in the target DC
+                    if any(g.group_id in dst_dc_val["full_groups"] for g in group.couple.groups):
                         continue
 
-                    dst_candidate = dst_candidates[i]
+                    src_space = storage.groups[group].get_stat().total_space
 
-                    assert dst_candidate.avail >= src_total_space
+                    # Search of the first elem >= src_total_space. Almost bisect_left, but
+                    # bisect do not work with reversed sorted
+                    lo, hi = 0, len(dst_candidate)
+                    while lo < hi:
+                        mid = (lo + hi) // 2
+                        if dst_candidate[mid][0] > src_space:
+                            lo = mid + 1
+                        else:
+                            hi = mid
+
+                    # Returns exact match or first below specified value
+                    if dst_candidates[lo][0] != src_space:
+                        if lo == 0:
+                            # No suitable candidates were found
+                            logger.info("For candidate {} with needed space {} from dc {} no dst in dc {}".format(
+                                group.group_id, helpers.convert_bytes(src_space), src_dc, dst_dc))
+                            continue
+                        else:
+                            lo = lo - 1  # the value at previous index should be big enough
+
+                    dst_candidate = dst_candidates[lo]
+                    assert dst_candidate[0] >= src_space
 
                     dst_group_id = dst_candidate.group_id
                     dst_group = storage.groups[dst_group_id]
+
+                    assert src_dc != dst_dc
+                    assert dst_group.node_backends[0].stat.total_space >= src_space
+                    assert not (dst_group_id in busy_group_ids or group.group_id in busy_group_ids)
+                    assert dst_dc_val["uncoupled_space_per_fs"][(dst_group.node_backends[0].node.host.addr,
+                                                                 dst_group.node_backends[0].fs.fsid)] >= src_space
 
                     # no need to find another pair for specified src. and do not use dst for the another src
                     src_groups.remove(group)
                     dst_dc_val['uncoupled_groups'].remove(dst_group)
                     dst_candidates.remove(dst_candidate)
                     # update stat ('valid_as_src' could be updated as well, but it is too expensive)
-                    dst_dc_val["uncoupled_space"] -= dst_candidate.avail
-                    dst_dc_val["uncoupled_space_per_fs"][dst_group.node_backends[0].fs.fsid] -= dst_candidate.avail
+                    dst_dc_val["uncoupled_space"] -= src_space
+                    dst_dc_val["uncoupled_space_per_fs"][(dst_group.node_backends[0].node.host.addr,
+                                                          dst_group.node_backends[0].fs.fsid)] -= src_space
                     dst_dc_val["unc_percentage"] = float(dst_dc_val["uncoupled_space"])/dst_dc_val["total_space"]
                     src_dc_val["full_groups"].remove(group)
-
-                    assert dst_group.node_backends[0].node.host.dc == dst_dc
-                    assert group.node_backends[0].node.host.dc == src_dc
-                    assert src_dc != dst_dc
-                    assert group.node_backends[0].stat.total_space >= src_total_space
-                    assert not (dst_group_id in busy_group_ids or group.group_id in busy_group_ids)
 
                     logger.info("Dst = {} from {}; src = {} from {}".format(dst_group, dst_dc, group.group_id, src_dc))
 

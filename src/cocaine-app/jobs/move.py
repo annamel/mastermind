@@ -451,18 +451,17 @@ class MoveJob(Job):
         :param params: params to be passed on creating the job instance
         :return: dict={'groups':[], 'resources':{ Job.RESOURCE_HOST_IN: [], etc}}
         """
-        res = {}
 
         # XXX: this code duplicates 'set_resources', 'involved_groups' methods but this duplication is chose
         # to minimize changes to test
-        res['resources'] = {}
-        res['resources'][Job.RESOURCE_HOST_IN] = []
-        res['resources'][Job.RESOURCE_HOST_OUT] = []
-        res['resources'][Job.RESOURCE_FS] = []
-        res['groups'] = []
-
-        res['resources'][Job.RESOURCE_HOST_IN].append(params['dst_host'])
-        res['resources'][Job.RESOURCE_HOST_OUT].append(params['src_host'])
+        res = {
+            'resources': {
+                Job.RESOURCE_HOST_IN: [params['dst_host']],
+                Job.RESOURCE_HOST_OUT: [params['src_host']],
+                Job.RESOURCE_FS: []
+            },
+            'groups': []
+        }
 
         for gid in [params['uncoupled_group'], params['group']] + params['merged_groups']:
             g = storage.groups[gid]
@@ -473,6 +472,6 @@ class MoveJob(Job):
         for group in storage.groups[params['group']].couple.groups:
             res['groups'].append(group.group_id)
 
-        assert(all(type(gid) == int for gid in res['groups']))
+        assert(all(isinstance(gid, int) for gid in res['groups']))
 
         return res
