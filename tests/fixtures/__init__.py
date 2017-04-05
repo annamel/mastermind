@@ -5,6 +5,7 @@ from monitor_stat_worker import (
     monitor_server,
     monitor_port,
 )
+from storage_env import storage_filler
 
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     'monitor_pool',
     'monitor_server',
     'monitor_port',
+    'storage_filler'
 ]

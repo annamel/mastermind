@@ -1,0 +1,133 @@
+{
+  "backends": {
+      "2001:db8:0:1111::11:1025:10/11": {
+          "backend_id": 11,
+          "defrag_state": 0,
+          "effective_free_space": 2728233006,
+          "effective_space": 5061282964,
+          "fragmentation": 0.08474519068511643,
+          "free_space": 3035659162,
+          "total_space": 5368709120,
+          "used_space": 2333049958,
+          "want_defrag": 0,
+          "group": 13,
+          "read_only": false,
+          "state": 1,
+          "status": "OK",
+          "blob_size_limit": 409709,
+          "fsid": 103948711
+      },
+      "2010:db8:0:1111::11:1025:10/12": {
+          "backend_id": 12,
+          "defrag_state": 0,
+          "effective_free_space": 2728233006,
+          "effective_space": 5061282964,
+          "fragmentation": 0.08474519068511643,
+          "free_space": 3035659162,
+          "total_space": 5368709120,
+          "used_space": 2333049958,
+          "want_defrag": 0,
+          "group": 14,
+          "read_only": false,
+          "state": 1,
+          "status": "OK",
+          "blob_size_limit": 409709,
+          "fsid": 103948712
+      },
+      "2011:db8:0:1111::11:1025:10/13": {
+          "backend_id": 13,
+          "defrag_state": 0,
+          "effective_free_space": 2728233006,
+          "effective_space": 5061282964,
+          "fragmentation": 0.08474519068511643,
+          "free_space": 3035659162,
+          "total_space": 5368709120,
+          "used_space": 2333049958,
+          "want_defrag": 0,
+          "group": 15,
+          "read_only": false,
+          "state": 1,
+          "status": "OK",
+          "blob_size_limit": 409709,
+          "fsid": 103948713
+      }
+  },
+  "nodes": {
+      "2001:db8:0:1111::11":{
+        "id": "2001:db8:0:1111::11:1025:10",
+        "host_id": "2001:db8:0:1111::11",
+        "port": 1025,
+        "family": 10,
+        "load_average": 0.53,
+        "la": 53
+      },
+    "2010:db8:0:1111::11":{
+      "id": "2010:db8:0:1111::11:1025:10",
+      "host_id": "2010:db8:0:1111::11",
+      "port": 1025,
+      "family": 10,
+      "load_average": 0.53,
+      "la": 53
+    },
+    "2011:db8:0:1111::11":{
+      "id": "2011:db8:0:1111::11:1025:10",
+      "host_id": "2011:db8:0:1111::11",
+      "port": 1025,
+      "family": 10,
+      "load_average": 0.53,
+      "la": 53
+    }
+  },
+  "filesystems": {
+    "2001:db8:0:1111::11:1025:10/1": {
+      "vfs": {
+      "blocks": 100,
+      "bsize": 4096
+    }
+    }
+  },
+  "groups": {
+    "13": {
+      "groupset": "13:14:15",
+      "status": "COUPLED",
+      "type": "data",
+      "metadata": {
+        "version": 2,
+        "couple": [13, 14, 15],
+        "namespace": "default",
+        "type": "data"
+      },
+      "backends": [
+        "2001:db8:0:1111::11:1025:10/11"
+      ]
+    },
+    "14": {
+      "groupset": "13:14:15",
+      "status": "COUPLED",
+      "type": "data",
+      "metadata": {
+        "version": 2,
+        "couple": [13, 14, 15],
+        "namespace": "default",
+        "type": "data"
+      },
+      "backends": [
+        "2010:db8:0:1111::11:1025:10/12"
+      ]
+    },
+    "15": {
+      "groupset": "13:14:15",
+      "status": "COUPLED",
+      "type": "data",
+      "metadata": {
+        "version": 2,
+        "couple": [13, 14, 15],
+        "namespace": "default",
+        "type": "data"
+      },
+      "backends": [
+        "2011:db8:0:1111::11:1025:10/13"
+      ]
+    }
+  }
+}
