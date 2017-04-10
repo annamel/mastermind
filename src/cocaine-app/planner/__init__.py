@@ -206,27 +206,18 @@ class Planner(object):
         for couple_data in couples_data:
             c = couple_data['couple']
 
-            if c == "None":
-                logger.error("Damaged couple? {}".format(couple_data))
+            if c not in storage.couples:
+                logger.error("Not valid couple is within collection {}".format(c))
                 continue
 
-            group_id = int(c.split(":")[0])
-
-            if group_id not in storage.groups:
-                logger.error("Not valid group is within collection {}".format(group_id))
-                continue
-            group = storage.groups[group_id]
-            if not group.couple:
-                logger.error("Group in collection is uncoupled {}".format(str(group)))
-                continue
-
-            ns_settings = self.namespaces_settings.get(group.couple.namespace.id)
+            ns_settings = self.namespaces_settings.get(c.namespace.id)
             if ns_settings and not ns_settings.attributes.ttl.enable:
-                logger.debug("Skipping group {} cause ns '{}' has no ttl attr".format(group_id, group.couple.namespace.id))
+                logger.debug("Skipping couple {} cause ns '{}' has no ttl attr".format(c, c.namespace.id))
                 continue
 
             # if couple_data doesn't contain cleanup_ts field then cleanup_ts has never been run on this couple
             # and None < idleness_threshold
+            group_id = int(c.split(":")[0])
             result[group_id] = couple_data.get('cleanup_ts')
 
         logger.info("History of last run is of {} len".format(len(result)))
