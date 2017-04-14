@@ -56,6 +56,7 @@ class MoveStarter(object):
                     continue
 
                 dcs_stat[dc]["total_space"] += nb.stat.total_space
+                dcs_stat[dc]['dc'] = dc
                 total_space += nb.stat.total_space
 
                 if group.type == storage.Group.TYPE_UNCOUPLED:
@@ -180,12 +181,12 @@ class MoveStarter(object):
             src_unc_percentage = src_dc_val["unc_percentage"]
 
             # DC with greater amount of uncoupled space are better candidates for destination of migration
-            dst_dcs_stat = sorted(dcs_stat, key=lambda x: x["uncoupled_space"], reverse=True)
+            dst_dcs_stat = sorted(dcs_stat.itervalues(), key=lambda x: x["uncoupled_space"], reverse=True)
 
             # suitable dst dc
-            for dst_dc, dst_dc_val in dst_dcs_stat.iteritems():
+            for dst_dc_val in dst_dcs_stat:
 
-                if dst_dc == src_dc:
+                if dst_dc_val['dc'] == src_dc:
                     # they would be filtered anyway while creating filtered_src_groups but let's avoid extra work
                     continue
 
@@ -194,7 +195,7 @@ class MoveStarter(object):
                 # we are interested in more or less equal of uncoupled space among DC
                 if dst_dc_val["unc_percentage"] < (src_unc_percentage + float(uncoupled_sensitivity)/100):
                     logger.info('Skip dst dc {} since its unc_percentage ({}) < src ({})'.format(
-                        dst_dc, dst_dc_val["unc_percentage"], src_unc_percentage))
+                        dst_dc_val['dc'], dst_dc_val["unc_percentage"], src_unc_percentage))
                     continue
 
                 # maintain at least some of uncoupled space within DC
@@ -202,7 +203,7 @@ class MoveStarter(object):
                 if uncoupled_space_min_bytes and dst_dc_val['uncoupled_space'] <= uncoupled_space_min_bytes:
                     logger.info(
                         'Dst dc {} is skipped, uncoupled space {} <= {} (limit)'.format(
-                            dst_dc, helpers.convert_bytes(dst_dc_val['uncoupled_space']),
+                            dst_dc_val['dc'], helpers.convert_bytes(dst_dc_val['uncoupled_space']),
                             helpers.convert_bytes(uncoupled_space_min_bytes))
                     )
                     continue
@@ -219,11 +220,11 @@ class MoveStarter(object):
                     avail = dst_dc_val["uncoupled_space_per_fs"][(nb.node.host.addr, nb.fs.fsid)]
                     dst_candidates.append((avail, group.group_id))
 
-                dst_candidates = sorted(dst_candidates, reverse=True)  # sort by avail space
+                dst_candidates = sorted(dst_candidates)  # sort by avail space
 
                 if len(dst_candidates) == 0:
                     logger.info("No dst candidates for move within dc {} (uncoupled = {}, hostinnot = {})".format(
-                        dst_dc, len(dst_dc_val["uncoupled_groups"]), len(host_in_notcandidates)))
+                        dst_dc_val['dc'], len(dst_dc_val["uncoupled_groups"]), len(host_in_notcandidates)))
                     continue
 
                 for group in src_groups:
@@ -234,33 +235,21 @@ class MoveStarter(object):
 
                     src_space = storage.groups[group].get_stat().total_space
 
-                    # Search of the first elem >= src_total_space. Almost bisect_left, but
-                    # bisect do not work with reversed sorted
-                    lo, hi = 0, len(dst_candidate)
-                    while lo < hi:
-                        mid = (lo + hi) // 2
-                        if dst_candidate[mid][0] > src_space:
-                            lo = mid + 1
-                        else:
-                            hi = mid
+                    # Search of the first elem >= src_total_space.
+                    idx = bisect.bisect_left([d[0] for d in dst_candidates], src_space)
+                    if idx == len(dst_candidates):
+                        # No suitable candidates were found
+                        logger.info("For candidate {} with needed space {} from dc {} no dst in dc {}".format(
+                            group.group_id, helpers.convert_bytes(src_space), src_dc, dst_dc_val['dc']))
+                        continue
 
-                    # Returns exact match or first below specified value
-                    if dst_candidates[lo][0] != src_space:
-                        if lo == 0:
-                            # No suitable candidates were found
-                            logger.info("For candidate {} with needed space {} from dc {} no dst in dc {}".format(
-                                group.group_id, helpers.convert_bytes(src_space), src_dc, dst_dc))
-                            continue
-                        else:
-                            lo = lo - 1  # the value at previous index should be big enough
-
-                    dst_candidate = dst_candidates[lo]
+                    dst_candidate = dst_candidates[idx]
                     assert dst_candidate[0] >= src_space
 
-                    dst_group_id = dst_candidate.group_id
+                    dst_group_id = dst_candidate[1]
                     dst_group = storage.groups[dst_group_id]
 
-                    assert src_dc != dst_dc
+                    assert src_dc != dst_dc_val['dc']
                     assert dst_group.node_backends[0].stat.total_space >= src_space
                     assert not (dst_group_id in busy_group_ids or group.group_id in busy_group_ids)
                     assert dst_dc_val["uncoupled_space_per_fs"][(dst_group.node_backends[0].node.host.addr,
@@ -277,7 +266,7 @@ class MoveStarter(object):
                     dst_dc_val["unc_percentage"] = float(dst_dc_val["uncoupled_space"])/dst_dc_val["total_space"]
                     src_dc_val["full_groups"].remove(group)
 
-                    logger.info("Dst = {} from {}; src = {} from {}".format(dst_group, dst_dc, group.group_id, src_dc))
+                    logger.info("Dst = {} from {}; src = {} from {}".format(dst_group, dst_dc_val['dc'], group.group_id, src_dc))
 
                     params.append({
                         'group': group.group_id,

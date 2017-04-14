@@ -136,9 +136,8 @@ class Scheduler(object):
     def get_busy_group_ids(self):
         """
         Return a list of busy groups ids
-        :return:
+        :return: a list of busy group ids
         """
-
         busy_group_ids = []
 
         for res_desc, res_val in self.res.iteritems():
@@ -146,13 +145,15 @@ class Scheduler(object):
             if res_type == self.RESOURCE_GROUP:
                 busy_group_ids.append(res_id)
 
+        assert (all(isinstance(gid, int) for gid in busy_group_ids))
+
         return busy_group_ids
 
     def get_busy_hosts(self, demand):
         """
         Return a list of addresses of hosts that doesn't satisfy the demand
         :param a dict [res_type] == res_val
-        :return: list of hosts that doesn't have enough resources
+        :return: list of hosts (string values) that doesn't have enough resources
         """
 
         def default_res_counter():
@@ -160,8 +161,7 @@ class Scheduler(object):
                 Job.RESOURCE_FS: Counter(),
                 Job.RESOURCE_HOST_IN: 0,
                 Job.RESOURCE_HOST_OUT: 0,
-                Job.RESOURCE_CPU: 0,
-                self.RESOURCE_GROUP: []
+                Job.RESOURCE_CPU: 0
             }
 
         # rebuild representation
@@ -169,8 +169,15 @@ class Scheduler(object):
         for res_desc, res_val in self.res.iteritems():
             res_type, res_id = res_desc[0], res_desc[1]
 
+            assert res_type in \
+                   (Job.RESOURCE_FS, Job.RESOURCE_HOST_OUT, Job.RESOURCE_HOST_IN, Job.RESOURCE_CPU, self.RESOURCE_GROUP)
+
+            if res_val == self.RESOURCE_GROUP:
+                continue
+
             for consumer in res_val:
                 res_consumption = consumer[0]
+                assert res_consumption <= 100
                 if res_type == Job.RESOURCE_FS:
                     hosts[res_id][res_type][res_desc[2]] += res_consumption
                     continue
